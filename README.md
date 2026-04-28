@@ -1,45 +1,74 @@
-# onegodian-api
+# OneGodian API
 
-Core backend API for the Onegodian ecosystem.
+Node API service for `api.OneGodian.org`.
 
-## Overview
+## Current status
 
-onegodian-api powers all system operations including:
+Version: `0.2.0`
 
-- Agent interactions
-- OHI Twin execution
-- Workflow processing
-- Data management
-- Platform integrations
+This repo is the first production-oriented API surface for the OneGodian web/application layer. It is intentionally small and deterministic so it can support paid membership, Belief Mapper, AI System Prompt, Algorithm Starter Kit, and future Protocol API work without becoming ungoverned infrastructure.
 
-## Core Responsibilities
+## Runtime requirements
 
-- Provide API endpoints for all services
-- Handle authentication and authorization
-- Process execution requests from agents and twins
-- Manage users, products, and transactions
+- Node.js `>=20`
+- npm
 
-## Connected Systems
+## Local development
 
-- onegodian-org (platform layer)
-- u-onegodian-org (education system)
-- execution-twin (task execution)
-- onegodian-agent-gateway (agent access)
-- acc-agent-command-console (control interface)
+```bash
+npm install
+npm run dev
+```
 
-## Architecture
+Default port: `3000`.
 
-This API serves as the central hub connecting:
+## Scripts
 
-User → Twin → Agent → API → Execution → Response
+```bash
+npm start      # run production server
+npm run dev    # run watch mode
+npm test       # run Node test runner
+npm run check  # syntax-check server/app entrypoints
+npm run health # call /health on a running server
+```
 
-## Future Modules
+## Environment variables
 
-- Identity Service (OSID)
-- Financial Service (ODFID)
-- Agent Routing Layer
-- Twin Coordination Layer
+| Variable | Purpose | Default |
+| --- | --- | --- |
+| `PORT` | HTTP port | `3000` |
+| `NODE_ENV` | runtime environment | `development` |
+| `CORS_ORIGIN` | allowed CORS origin | `*` |
 
-## Organization
+## Endpoints
 
-Part of the Onegodian ecosystem.
+| Method | Path | Purpose |
+| --- | --- | --- |
+| `GET` | `/` | service identity |
+| `GET` | `/health` | healthcheck |
+| `GET` | `/api/status` | runtime status |
+| `GET` | `/api/v1/profile` | OneGodian API profile |
+| `POST` | `/api/v1/alignment/evaluate` | evaluate candidate options under the OneGodian Algorithm decision rule |
+| `POST` | `/api/v1/verify` | development verification placeholder |
+| `POST` | `/api/v1/register` | development registration placeholder |
+
+Legacy paths `/api/verify` and `/api/register` are preserved with `307` redirects to the v1 endpoints.
+
+## Production readiness rule
+
+A feature should not be called operational until it is:
+
+1. implemented,
+2. versioned,
+3. documented,
+4. repeatable,
+5. logged,
+6. testable.
+
+## Next production tasks
+
+1. Add automated tests for `/health`, `/api/v1/profile`, `/api/v1/alignment/evaluate`, and validation failures.
+2. Add OpenAPI documentation.
+3. Replace development placeholder verification/registration with persistent storage.
+4. Add request-level auth for protected mutation endpoints.
+5. Add deployment config for the selected Node host.
