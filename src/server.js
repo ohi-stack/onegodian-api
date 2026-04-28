@@ -1,19 +1,17 @@
-import express from 'express';
-import cors from 'cors';
-import helmet from 'helmet';
-import morgan from 'morgan';
+import 'dotenv/config';
+import { createApp } from './app.js';
 
-const app = express();
-const port = process.env.PORT || 3000;
-app.use(helmet());
-app.use(cors());
-app.use(express.json());
-app.use(morgan('dev'));
+const port = Number(process.env.PORT || 3000);
+const app = createApp();
 
-app.get('/', (req,res)=>res.json({name:'onegodian-api',status:'online',version:'0.1.0'}));
-app.get('/health', (req,res)=>res.json({ok:true,time:new Date().toISOString()}));
-app.get('/api/status', (req,res)=>res.json({service:'api.Onegodian.org',ready:true,node:process.version}));
-app.post('/api/verify', (req,res)=>res.json({verified:true,input:req.body||{}}));
-app.post('/api/register', (req,res)=>res.status(201).json({created:true,data:req.body||{}}));
+const server = app.listen(port, () => {
+  console.log(`onegodian-api listening on ${port}`);
+});
 
-app.listen(port, ()=>console.log(`onegodian-api listening on ${port}`));
+function shutdown(signal) {
+  console.log(`${signal} received, shutting down onegodian-api`);
+  server.close(() => process.exit(0));
+}
+
+process.on('SIGTERM', () => shutdown('SIGTERM'));
+process.on('SIGINT', () => shutdown('SIGINT'));
