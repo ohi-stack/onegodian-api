@@ -2,7 +2,9 @@ import express from 'express';
 import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
+import rateLimit from 'express-rate-limit';
 import { z } from 'zod';
+import { config } from './config.js';
 
 const AlignmentSchema = z.object({
   context: z.string().min(1).max(5000),
@@ -103,6 +105,19 @@ function requireAdmin(req, res, next) {
   return next();
 }
 
+function requireBridgeKey(req, res, next) {
+  if (!config.apiBridgeEnabled) {
+    return res.status(503).json({ error: 'api_bridge_key_not_configured', requestId: req.requestId });
+  }
+
+  const supplied = req.headers['x-omos-app-key'] || req.headers['x-onegodian-app-key'];
+  if (!supplied || supplied !== config.API_BRIDGE_KEY) {
+    return res.status(401).json({ error: 'invalid_app_bridge_key', requestId: req.requestId });
+  }
+
+  return next();
+}
+
 function scoreOption(option) {
   const normalized = option.toLowerCase();
   const bonuses = ['truth', 'clarity', 'coherence', 'dignity', 'unity', 'verify', 'document', 'member', 'education'];
@@ -113,18 +128,80 @@ function scoreOption(option) {
 }
 
 function checkoutUrl(kind, id) {
-  const appUrl = process.env.APP_URL || 'http://localhost:3000';
-  return `${appUrl}/checkout/${kind}/${encodeURIComponent(id)}`;
+  return `${config.APP_URL}/checkout/${kind}/${encodeURIComponent(id)}`;
+}
+
+function appManifest() {
+  return {
+    schemaVersion: '1.0',
+    service: config.publicServiceName,
+    name: 'OneGodian API',
+    slug: 'onegodian-api',
+    version: config.version,
+    environment: config.NODE_ENV,
+    baseUrl: config.APP_URL,
+    status: 'online',
+    bridge: {
+      header: 'X-OMOS-App-Key',
+      enabled: config.apiBridgeEnabled,
+      alternateHeader: 'X-OneGodian-App-Key'
+    },
+    capabilities: [
+      'health',
+      'readiness',
+      'status',
+      'app_bridge_manifest',
+      'system_registry',
+      'member_auth_placeholder',
+      'billing_checkout_placeholder',
+      'digital_product_checkout_placeholder',
+      'alignment_evaluation',
+      'verification_placeholder'
+    ],
+    routes: {
+      root: '/',
+      health: '/health',
+      ready: '/ready',
+      version: '/version',
+      status: '/api/status',
+      manifest: '/api/system/manifest',
+      capabilities: '/api/system/capabilities',
+      registry: '/api/system/registry',
+      bridgeStatus: '/api/bridge/status'
+    },
+    connectedSystems: [
+      'onegodian.org',
+      'u.onegodian.org',
+      'app.onegodian.com',
+      'acc.quantumohi.com',
+      'omos.onegodian.org'
+    ],
+    timestampUtc: new Date().toISOString()
+  };
 }
 
 export function createApp() {
   const app = express();
 
   app.disable('x-powered-by');
+  app.set('trust proxy', 1);
   app.use(helmet());
-  app.use(cors({ origin: process.env.CORS_ORIGIN || '*'}));
+  app.use(cors({
+    origin(origin, callback) {
+      if (!origin || config.corsOrigins.length === 0 || config.corsOrigins.includes(origin)) {
+        return callback(null, true);
+      }
+      return callback(new Error('cors_origin_not_allowed'));
+    }
+  }));
+  app.use(rateLimit({
+    windowMs: config.RATE_LIMIT_WINDOW_MS,
+    max: config.RATE_LIMIT_MAX,
+    standardHeaders: true,
+    legacyHeaders: false
+  }));
   app.use(express.json({ limit: '1mb' }));
-  app.use(morgan(process.env.NODE_ENV === 'production' ? 'combined' : 'dev'));
+  app.use(morgan(config.NODE_ENV === 'production' ? 'combined' : 'dev'));
 
   app.use((req, res, next) => {
     req.requestId = req.headers['x-request-id'] || makeRequestId();
@@ -133,16 +210,16 @@ export function createApp() {
   });
 
   app.get('/', (req, res) => res.json({
-    name: 'onegodian-api',
+    name: config.serviceName,
     status: 'online',
-    version: '0.3.0',
+    version: config.version,
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
   }));
 
   app.get('/health', (req, res) => res.json({
     ok: true,
-    service: 'onegodian-api',
+    service: config.serviceName,
     timestampUtc: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
     requestId: req.requestId
@@ -155,23 +232,51 @@ export function createApp() {
       routes: true,
       billing: true,
       products: true,
-      members: true
+      members: true,
+      cors: true,
+      rateLimit: true,
+      appBridge: config.apiBridgeEnabled,
+      database: config.databaseConfigured,
+      stripe: config.stripeConfigured
     },
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
   }));
 
   app.get('/version', (req, res) => res.json({
-    name: 'onegodian-api',
-    version: '0.3.0',
+    name: config.serviceName,
+    version: config.version,
     requestId: req.requestId
   }));
 
   app.get('/api/status', (req, res) => res.json({
-    service: 'api.OneGodian.org',
+    service: config.publicServiceName,
     ready: true,
     node: process.version,
-    environment: process.env.NODE_ENV || 'development',
+    environment: config.NODE_ENV,
+    version: config.version,
+    requestId: req.requestId
+  }));
+
+  app.get('/api/system/manifest', (req, res) => res.json({ ...appManifest(), requestId: req.requestId }));
+  app.get('/api/system/capabilities', (req, res) => res.json({ capabilities: appManifest().capabilities, requestId: req.requestId }));
+  app.get('/api/system/registry', (req, res) => res.json({
+    registry: [
+      { key: 'onegodian-api', status: 'online', baseUrl: config.APP_URL, version: config.version },
+      { key: 'members', status: 'placeholder_ready', route: '/api/members' },
+      { key: 'products', status: 'placeholder_ready', route: '/api/products' },
+      { key: 'billing', status: config.stripeConfigured ? 'stripe_configured' : 'mock_checkout', route: '/billing' },
+      { key: 'app-bridge', status: config.apiBridgeEnabled ? 'secured' : 'key_not_configured', route: '/api/bridge/status' }
+    ],
+    requestId: req.requestId
+  }));
+
+  app.get('/api/bridge/status', requireBridgeKey, (req, res) => res.json({
+    ok: true,
+    bridge: 'onegodian-app-bridge',
+    authenticated: true,
+    version: config.version,
+    timestampUtc: new Date().toISOString(),
     requestId: req.requestId
   }));
 
@@ -180,7 +285,7 @@ export function createApp() {
     operatingPosture: 'founder-authored identity and AI governance ecosystem',
     currentFocus: ['membership', 'education', 'digital products', 'AI identity governance tools'],
     technicalDirection: ['OneGodian Algorithm', 'Belief Mapper', 'Protocol API', 'Agent Authority Model'],
-    version: '0.3.0',
+    version: config.version,
     requestId: req.requestId
   }));
 
@@ -279,7 +384,7 @@ export function createApp() {
 
     const plan = plans[parsed.data.plan];
     return res.json({
-      billingMode: process.env.STRIPE_SECRET_KEY ? 'stripe_configured' : 'mock_checkout',
+      billingMode: config.stripeConfigured ? 'stripe_configured' : 'mock_checkout',
       plan,
       checkoutSessionId: makeToken('cs'),
       checkoutUrl: checkoutUrl('subscription', plan.id),
@@ -305,7 +410,7 @@ export function createApp() {
   app.get('/billing/status', requireAuth, (req, res) => res.json({
     customer: req.user.email,
     subscription: req.user.subscription,
-    billingMode: process.env.STRIPE_SECRET_KEY ? 'stripe_configured' : 'mock_checkout',
+    billingMode: config.stripeConfigured ? 'stripe_configured' : 'mock_checkout',
     requestId: req.requestId
   }));
 
@@ -374,7 +479,11 @@ export function createApp() {
 
   app.use((err, req, res, next) => {
     console.error(err);
-    res.status(500).json({ error: 'internal_server_error', requestId: req.requestId });
+    const status = err.message === 'cors_origin_not_allowed' ? 403 : 500;
+    res.status(status).json({
+      error: status === 403 ? 'cors_origin_not_allowed' : 'internal_server_error',
+      requestId: req.requestId
+    });
   });
 
   return app;
