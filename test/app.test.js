@@ -38,10 +38,58 @@ test('core health, readiness, and version routes compile and respond', async (t)
   assert.equal(ready.body.ready, true);
   assert.equal(ready.body.checks.routes, true);
   assert.equal(ready.body.checks.billing, true);
+  assert.equal(ready.body.checks.cors, true);
+  assert.equal(ready.body.checks.rateLimit, true);
 
   const version = await request(baseUrl, '/version');
   assert.equal(version.response.status, 200);
-  assert.equal(version.body.version, '0.3.0');
+  assert.equal(version.body.version, '0.4.0');
+});
+
+test('system manifest, capabilities, and registry routes respond', async (t) => {
+  const { server, baseUrl } = startTestServer();
+  t.after(() => server.close());
+
+  const manifest = await request(baseUrl, '/api/system/manifest');
+  assert.equal(manifest.response.status, 200);
+  assert.equal(manifest.body.slug, 'onegodian-api');
+  assert.equal(manifest.body.version, '0.4.0');
+  assert.equal(manifest.body.routes.health, '/health');
+  assert.ok(manifest.body.capabilities.includes('app_bridge_manifest'));
+
+  const capabilities = await request(baseUrl, '/api/system/capabilities');
+  assert.equal(capabilities.response.status, 200);
+  assert.ok(capabilities.body.capabilities.includes('system_registry'));
+
+  const registry = await request(baseUrl, '/api/system/registry');
+  assert.equal(registry.response.status, 200);
+  assert.ok(Array.isArray(registry.body.registry));
+  assert.ok(registry.body.registry.length >= 1);
+});
+
+test('app bridge status rejects missing key when bridge key is configured', async (t) => {
+  const previous = process.env.API_BRIDGE_KEY;
+  process.env.API_BRIDGE_KEY = 'test_bridge_key_12345';
+  const { createApp: createFreshApp } = await import(`../src/app.js?bridge=${Date.now()}`);
+  const app = createFreshApp();
+  const server = app.listen(0);
+  const { port } = server.address();
+  const baseUrl = `http://127.0.0.1:${port}`;
+  t.after(() => {
+    server.close();
+    if (previous === undefined) delete process.env.API_BRIDGE_KEY;
+    else process.env.API_BRIDGE_KEY = previous;
+  });
+
+  const rejected = await request(baseUrl, '/api/bridge/status');
+  assert.equal(rejected.response.status, 401);
+  assert.equal(rejected.body.error, 'invalid_app_bridge_key');
+
+  const accepted = await request(baseUrl, '/api/bridge/status', {
+    headers: { 'x-omos-app-key': 'test_bridge_key_12345' }
+  });
+  assert.equal(accepted.response.status, 200);
+  assert.equal(accepted.body.authenticated, true);
 });
 
 test('member signup, login, and authenticated profile route work', async (t) => {
