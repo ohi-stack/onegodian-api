@@ -1,15 +1,15 @@
 import 'dotenv/config';
 import { createApp } from './app.js';
+import { config } from './config.js';
 
-const port = Number(process.env.PORT || 3000);
 const app = createApp();
 
-const server = app.listen(port, () => {
-  console.log(`onegodian-api listening on ${port}`);
+const server = app.listen(config.PORT, () => {
+  console.log(`${config.serviceName} listening on ${config.PORT}`);
 });
 
 function shutdown(signal) {
-  console.log(`${signal} received, shutting down onegodian-api`);
+  console.log(`${signal} received, shutting down ${config.serviceName}`);
   server.close(() => process.exit(0));
 }
 
