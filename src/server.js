@@ -1,8 +1,8 @@
 import 'dotenv/config';
-import { createApp } from './app.js';
+import { createRootApp } from './rootApp.js';
 
 const port = Number(process.env.PORT || 3000);
-const app = createApp();
+const app = createRootApp();
 
 const server = app.listen(port, () => {
   console.log(`onegodian-api listening on ${port}`);
