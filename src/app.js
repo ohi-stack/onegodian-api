@@ -3,6 +3,9 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import { z } from 'zod';
+import { createQuantumOhiRouter } from './quantumOhi.js';
+
+const SERVICE_VERSION = '0.4.0';
 
 const AlignmentSchema = z.object({
   context: z.string().min(1).max(5000),
@@ -135,7 +138,7 @@ export function createApp() {
   app.get('/', (req, res) => res.json({
     name: 'onegodian-api',
     status: 'online',
-    version: '0.3.0',
+    version: SERVICE_VERSION,
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
   }));
@@ -155,7 +158,8 @@ export function createApp() {
       routes: true,
       billing: true,
       products: true,
-      members: true
+      members: true,
+      quantumOhi: true
     },
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
@@ -163,7 +167,7 @@ export function createApp() {
 
   app.get('/version', (req, res) => res.json({
     name: 'onegodian-api',
-    version: '0.3.0',
+    version: SERVICE_VERSION,
     requestId: req.requestId
   }));
 
@@ -180,7 +184,7 @@ export function createApp() {
     operatingPosture: 'founder-authored identity and AI governance ecosystem',
     currentFocus: ['membership', 'education', 'digital products', 'AI identity governance tools'],
     technicalDirection: ['OneGodian Algorithm', 'Belief Mapper', 'Protocol API', 'Agent Authority Model'],
-    version: '0.3.0',
+    version: SERVICE_VERSION,
     requestId: req.requestId
   }));
 
@@ -365,6 +369,16 @@ export function createApp() {
     activeDownloadTokens: downloadTokens.size,
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
+  }));
+
+  app.use('/admin/quantum-ohi', requireAuth, requireAdmin, createQuantumOhiRouter({
+    getPlatformSnapshot: () => ({
+      users: users.size,
+      billingEvents: billingEvents.length,
+      products: products.length,
+      activeDownloadTokens: downloadTokens.size,
+      runtimeUptimeSeconds: Math.round(process.uptime())
+    })
   }));
 
   app.post('/api/verify', (req, res) => res.redirect(307, '/api/v1/verify'));
