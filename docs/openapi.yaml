@@ -1,12 +1,12 @@
 openapi: 3.1.0
 info:
   title: OneGodian API
-  version: 0.3.0
+  version: 0.4.0
   description: |
     Production-oriented API surface for api.onegodian.org. This specification documents
-    the current v0.3.0 routes for health, readiness, version visibility, alignment evaluation,
+    the current v0.4.0 routes for health, readiness, version visibility, alignment evaluation,
     member access, product catalog, mock billing posture, protected download authorization,
-    and admin statistics.
+    admin statistics, and the admin-protected Quantum-OHI intelligence scaffold.
 
     Current billing behavior is production-shaped but not full Stripe production yet. When
     STRIPE_SECRET_KEY is present, billing routes report stripe_configured. Real Stripe Checkout
@@ -25,6 +25,7 @@ tags:
   - name: Billing
   - name: Products
   - name: Admin
+  - name: Quantum-OHI
 paths:
   /:
     get:
@@ -355,6 +356,97 @@ paths:
           $ref: '#/components/responses/Unauthorized'
         '403':
           description: Forbidden
+  /admin/quantum-ohi:
+    get:
+      tags: [Quantum-OHI]
+      summary: Quantum-OHI module identity and route discovery
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Quantum-OHI module metadata }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/overview:
+    get:
+      tags: [Quantum-OHI]
+      summary: Platform intelligence overview
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Read-only platform intelligence overview }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/platform-health:
+    get:
+      tags: [Quantum-OHI]
+      summary: Platform health dimensions and current snapshot
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Health-analysis scaffold; no fabricated production score }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/anomalies:
+    get:
+      tags: [Quantum-OHI]
+      summary: Evidence-backed anomaly results
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Current anomaly analysis }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/dependencies:
+    get:
+      tags: [Quantum-OHI]
+      summary: Platform dependency map
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Dependency map and authority metadata }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/recommendations:
+    get:
+      tags: [Quantum-OHI]
+      summary: Analysis-only platform recommendations
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Evidence-backed recommendations awaiting authorized workflow handling }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/events:
+    get:
+      tags: [Quantum-OHI]
+      summary: Intelligence event view
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Intelligence event stream status and events }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/forecasts:
+    get:
+      tags: [Quantum-OHI]
+      summary: Platform forecast interface
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Forecast results when historical telemetry is connected }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/audit:
+    get:
+      tags: [Quantum-OHI]
+      summary: Quantum-OHI audit contract and records
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Audit requirements and current records }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+  /admin/quantum-ohi/settings:
+    get:
+      tags: [Quantum-OHI]
+      summary: Read-only intelligence-layer settings
+      security: [{ bearerAuth: [] }]
+      responses:
+        '200': { description: Intelligence-layer mode, telemetry connections and mutation policy }
+        '401': { $ref: '#/components/responses/Unauthorized' }
+        '403': { description: Forbidden }
+
 components:
   securitySchemes:
     bearerAuth:

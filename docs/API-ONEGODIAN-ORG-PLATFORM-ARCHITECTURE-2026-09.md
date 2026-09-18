@@ -143,6 +143,33 @@ Every production service should expose or internally capture:
 - safe error classification;
 - usage/metering event where applicable.
 
+## Quantum-OHI™ intelligence layer
+
+Quantum-OHI™ is the admin-protected intelligence, observability and decision-support layer of the OneGodian Platform Core. It consumes telemetry and platform context, but it is not an independent system of record or execution authority.
+
+Implemented read-only route family:
+
+- `GET /admin/quantum-ohi`
+- `GET /admin/quantum-ohi/overview`
+- `GET /admin/quantum-ohi/platform-health`
+- `GET /admin/quantum-ohi/anomalies`
+- `GET /admin/quantum-ohi/dependencies`
+- `GET /admin/quantum-ohi/recommendations`
+- `GET /admin/quantum-ohi/events`
+- `GET /admin/quantum-ohi/forecasts`
+- `GET /admin/quantum-ohi/audit`
+- `GET /admin/quantum-ohi/settings`
+
+Production rule:
+
+`observe → analyze → recommend → ACC approval/workflow → authoritative service → audit → verification`
+
+Quantum-OHI™ must not directly modify users, money, certificates, ODIN records, OBP-1 evidence, QR-V verification state, production credentials, deployments, permissions, or production configuration.
+
+Until real telemetry is connected, the implementation must explicitly return uncomputed/unconnected status rather than fabricated health, anomaly, recommendation, event, or forecast claims.
+
+See `QUANTUM-OHI-PLATFORM-INTELLIGENCE-2026-09-17.md` for the canonical operating boundary.
+
 ## Dashboard requirement
 
 A future operator-facing API dashboard should consume these interfaces rather than maintain a second source of truth. Recommended dashboard modules:

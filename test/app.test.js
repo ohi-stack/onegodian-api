@@ -38,10 +38,11 @@ test('core health, readiness, and version routes compile and respond', async (t)
   assert.equal(ready.body.ready, true);
   assert.equal(ready.body.checks.routes, true);
   assert.equal(ready.body.checks.billing, true);
+  assert.equal(ready.body.checks.quantumOhi, true);
 
   const version = await request(baseUrl, '/version');
   assert.equal(version.response.status, 200);
-  assert.equal(version.body.version, '0.3.0');
+  assert.equal(version.body.version, '0.4.0');
 });
 
 test('member signup, login, and authenticated profile route work', async (t) => {
@@ -139,6 +140,46 @@ test('product catalog, checkout, and download-token fulfillment work', async (t)
   assert.equal(download.body.authorized, true);
   assert.equal(download.body.product.id, productId);
 });
+
+test('Quantum-OHI admin routes are protected and remain analysis-only', async (t) => {
+  const { server, baseUrl } = startTestServer();
+  t.after(() => server.close());
+
+  const unauthorized = await request(baseUrl, '/admin/quantum-ohi/overview');
+  assert.equal(unauthorized.response.status, 401);
+
+  const signup = await request(baseUrl, '/api/members/signup', {
+    method: 'POST',
+    body: JSON.stringify({
+      email: 'quantum-admin@example.com',
+      password: 'strong-password'
+    })
+  });
+  assert.equal(signup.response.status, 201);
+
+  const headers = { authorization: `Bearer ${signup.body.token}` };
+
+  const overview = await request(baseUrl, '/admin/quantum-ohi/overview', { headers });
+  assert.equal(overview.response.status, 200);
+  assert.equal(overview.body.layer, 'Quantum-OHI');
+  assert.equal(overview.body.gateway, 'api.onegodian.org');
+  assert.equal(overview.body.executionPolicy.authoritativeStateChanges, false);
+  assert.ok(Array.isArray(overview.body.systems));
+
+  const health = await request(baseUrl, '/admin/quantum-ohi/platform-health', { headers });
+  assert.equal(health.response.status, 200);
+  assert.equal(health.body.scoreStatus, 'not_yet_computed_from_production_telemetry');
+
+  const recommendations = await request(baseUrl, '/admin/quantum-ohi/recommendations', { headers });
+  assert.equal(recommendations.response.status, 200);
+  assert.deepEqual(recommendations.body.recommendations, []);
+  assert.equal(recommendations.body.executionPolicy.mode, 'analysis_and_recommendation_only');
+
+  const settings = await request(baseUrl, '/admin/quantum-ohi/settings', { headers });
+  assert.equal(settings.response.status, 200);
+  assert.equal(settings.body.directMutationEnabled, false);
+});
+
 
 test('admin stats require admin auth and return operational counts', async (t) => {
   const { server, baseUrl } = startTestServer();

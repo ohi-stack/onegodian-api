@@ -39,6 +39,18 @@ https://api.onegodian.org/
 │   ├── apps
 │   └── settings
 │
+├── admin/
+│   └── quantum-ohi/
+│       ├── overview
+│       ├── platform-health
+│       ├── anomalies
+│       ├── dependencies
+│       ├── recommendations
+│       ├── events
+│       ├── forecasts
+│       ├── audit
+│       └── settings
+│
 ├── bridge/
 │   ├── connect
 │   ├── sync
@@ -67,6 +79,9 @@ Handles certificate verification, generation, download, revocation, and certific
 
 ### `/dashboard/`
 Supports the unified dashboard layer, including statistics, notifications, user profile, memberships, apps, and settings.
+
+### `/admin/quantum-ohi/`
+Provides the admin-protected Quantum-OHI™ intelligence and systems-observation layer. These interfaces analyze and recommend; they do not directly mutate authoritative platform state. Production health scores, anomalies, recommendations, events and forecasts must be backed by real telemetry rather than placeholder claims.
 
 ### `/bridge/`
 Supports app bridge connectivity, synchronization, heartbeat monitoring, and manifest discovery.
@@ -98,6 +113,7 @@ Provides a basic service health check endpoint for uptime monitoring, deployment
 - Keep all service routes lowercase and stable.
 - Use JSON responses unless a route explicitly returns a file download.
 - Protect sensitive routes through authentication and authorization checks.
+- Keep Quantum-OHI™ analysis/read surfaces separate from execution authority; approved state changes must run through the authoritative service and applicable ACC workflow.
 - Keep `/health` lightweight, public-safe, and suitable for automated monitoring.
 - Store App Bridge keys and service credentials as environment variables, not in committed source code.
 - Use versioned API paths later if breaking changes are introduced, for example: `/v1/auth/login`.
