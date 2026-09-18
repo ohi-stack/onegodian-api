@@ -4,7 +4,7 @@ Shared Node API and application-service layer for `api.onegodian.org`, operated 
 
 ## Current status
 
-Version: `0.3.0`
+Version: `0.4.0`
 Status: production upgrade in progress
 Canonical service: `https://api.onegodian.org`
 
@@ -21,8 +21,9 @@ The current runtime already exposes early membership, product, billing, Algorith
 - **Algorithm:** versioned alignment/evaluation interfaces
 - **Verification:** versioned verification/registration interfaces
 - **Operations:** audit, metrics, provider health, webhooks and admin statistics
+- **Quantum-OHI™:** admin-protected platform intelligence, health analysis, anomalies, dependencies, recommendations, events, forecasts and audit
 
-See `docs/API-ONEGODIAN-ORG-PLATFORM-ARCHITECTURE-2026-09.md` for the canonical September 2026 architecture.
+See `docs/API-ONEGODIAN-ORG-PLATFORM-ARCHITECTURE-2026-09.md` for the canonical September 2026 architecture and `docs/QUANTUM-OHI-PLATFORM-INTELLIGENCE-2026-09-17.md` for the Quantum-OHI execution boundary.
 
 ## OLLM integration
 
@@ -117,6 +118,16 @@ Production deployments must replace permissive development defaults with explici
 | `POST` | `/api/products/checkout` | digital product checkout route with temporary download token |
 | `GET` | `/api/products/downloads/:token` | temporary protected download authorization |
 | `GET` | `/admin/stats` | admin-only operational stats |
+| `GET` | `/admin/quantum-ohi` | Quantum-OHI module identity and route discovery |
+| `GET` | `/admin/quantum-ohi/overview` | platform intelligence overview |
+| `GET` | `/admin/quantum-ohi/platform-health` | health dimensions and current snapshot |
+| `GET` | `/admin/quantum-ohi/anomalies` | evidence-backed anomaly results |
+| `GET` | `/admin/quantum-ohi/dependencies` | platform dependency map |
+| `GET` | `/admin/quantum-ohi/recommendations` | analysis-only recommendations |
+| `GET` | `/admin/quantum-ohi/events` | intelligence event view |
+| `GET` | `/admin/quantum-ohi/forecasts` | forecast interface |
+| `GET` | `/admin/quantum-ohi/audit` | audit contract and records |
+| `GET` | `/admin/quantum-ohi/settings` | read-only intelligence-layer settings |
 
 Legacy paths `/api/verify` and `/api/register` are preserved with `307` redirects to the v1 endpoints.
 
@@ -162,6 +173,7 @@ Current `test/app.test.js` coverage includes:
 - billing checkout/webhook/status
 - product catalog/checkout/download token
 - admin stats authorization
+- Quantum-OHI admin authorization and analysis-only boundary
 - JSON 404 behavior
 
 Run:
@@ -195,8 +207,9 @@ A feature should not be called operational until it is:
 5. Persist OLLM conversation/history and usage metering.
 6. Add rate limiting, production CORS allowlist and structured audit logging.
 7. Add OpenAPI documentation validated against implemented routes.
-8. Build the operator dashboard around API health, users, keys, OLLM executions, providers, usage, billing, products, verification, logs and webhooks.
-9. Keep deployment and rollback documentation synchronized with the actual hosting environment.
+8. Connect real telemetry feeds to Quantum-OHI™, then expose evidence-backed health, anomaly, dependency and recommendation data to the operator dashboard.
+9. Bridge approved Quantum-OHI recommendations into ACC workflows without granting Quantum-OHI direct mutation authority.
+10. Keep deployment and rollback documentation synchronized with the actual hosting environment.
 
 ## Organizational boundary
 
