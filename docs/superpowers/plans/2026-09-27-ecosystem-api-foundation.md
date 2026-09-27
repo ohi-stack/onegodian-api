@@ -21,13 +21,14 @@
 - All replay-sensitive mutations require idempotency or equivalent unique-source protection.
 - OpenAPI must document only implemented behavior.
 - Node runtime floor remains `>=20.0.0`.
+- Existing non-ecosystem routes must continue to start in development/test even when `DATABASE_URL` is absent; ecosystem persistence readiness must report false instead of crashing the app.
 
 ## Review Focus
 
 1. **Replayed signed request:** same nonce/signature submitted twice must be rejected with `409 replay_detected`; pinned in Task 3.
 2. **Clock-skewed request:** a request outside the five-minute acceptance window must be rejected with `401 stale_request`; pinned in Task 3.
 3. **Duplicate product event:** a repeated source product/version must not create a second product row or inflate metrics; pinned in Task 5.
-4. **Unexpected customer fields:** sync payloads containing email/name/address keys must be rejected rather than silently persisted; pinned in Task 4.
+4. **Unexpected customer fields:** sync payloads containing email/name/address keys must be rejected rather than silently persisted; pinned in Task 2 and Task 4.
 5. **Disconnected/stale site:** heartbeat older than the configured threshold must surface `stale` in site reads instead of `healthy`; pinned in Task 7.
 
 ---
@@ -49,13 +50,15 @@
 - `test/ecosystem.credentials.test.js` — signing/replay unit tests.
 - `test/ecosystem.service.test.js` — normalization/idempotency unit tests.
 - `test/ecosystem.routes.test.js` — HTTP contract tests.
+- `test/ecosystem.postgres.test.js` — migration/repository integration tests against PostgreSQL.
 - `test/helpers/ecosystemMemoryRepository.js` — deterministic repository double for route/service tests.
 
 ### Modify
 
-- `src/app.js` — mount ecosystem router and readiness state.
+- `src/app.js` — dependency injection, ecosystem router and readiness state.
 - `package.json` — add `pg`, migration script and syntax checks for ecosystem modules.
 - `.env.example` — add bootstrap key and security-window settings.
+- `.github/workflows/ci.yml` — run PostgreSQL service, migrations and integration tests.
 - `docs/openapi.yaml` — document implemented ecosystem foundation routes after route tests pass.
 - `docs/onegodian-api-route-map.md` — add production status for implemented routes only.
 
@@ -72,12 +75,12 @@
 - Test: `test/ecosystem.service.test.js`
 
 **Interfaces:**
-- Produces: `createDatabase({ connectionString })`, `query(text, params)`, `withTransaction(callback)`, `close()`, `health()` from `src/db.js`.
+- Produces: `createDatabase({ connectionString })` returning `query(text, params)`, `withTransaction(callback)`, `close()`, `health()`.
 - Produces tables: `ecosystem_sites`, `ecosystem_node_credentials`, `ecosystem_nonces`, `ecosystem_products`, `ecosystem_metrics`, `ecosystem_events`, `ecosystem_sync_runs`, `schema_migrations`.
 
 - [ ] **Step 1: Write the failing database-interface test**
 
-Add `test('database adapter exposes query, transaction, health and close')` asserting `createDatabase()` returns those four callable interfaces without opening a connection until used.
+Add `test('database adapter exposes query, transaction, health and close')` asserting `createDatabase()` returns those four callable interfaces without opening a connection until one is used.
 
 - [ ] **Step 2: Run the focused test and verify failure**
 
@@ -86,11 +89,11 @@ Expected: FAIL because `src/db.js` does not exist.
 
 - [ ] **Step 3: Implement the database adapter and migration SQL**
 
-Use `pg.Pool`; keep SQL parameterized. `001_ecosystem_foundation.sql` must define UUID/text primary identifiers supplied by the service, UTC timestamps, unique `(site_id, local_product_id)`, unique event IDs, unique nonce-per-client, JSONB payload/metadata columns where normalization does not justify separate columns, and indexes for site status, product source, event time and metric time.
+Use `pg.Pool`; keep SQL parameterized. `001_ecosystem_foundation.sql` defines service-supplied text/UUID identifiers, UTC timestamps, unique `(site_id, local_product_id)`, unique event IDs, unique `(client_id, nonce)`, JSONB metadata/payload columns where normalization does not justify separate columns, and indexes for site status, product source, event time and metric time.
 
 - [ ] **Step 4: Implement `scripts/migrate.js`**
 
-Signature: executable module that reads `DATABASE_URL`, applies unapplied `migrations/*.sql` in filename order inside transactions, records filenames in `schema_migrations`, and exits non-zero on failure without printing credentials.
+Read `DATABASE_URL`, apply unapplied `migrations/*.sql` in filename order inside transactions, record filenames in `schema_migrations`, redact connection details from errors, and exit non-zero on failure.
 
 - [ ] **Step 5: Update configuration and scripts**
 
@@ -118,10 +121,11 @@ git commit -m "feat: add ecosystem persistence foundation"
 **Interfaces:**
 - Produces: `SiteRegistrationSchema`, `HeartbeatSchema`, `ProductSyncSchema`, `MetricSyncSchema`, `EcosystemEventSchema`.
 - Produces: `NODE_SCOPES`, `SIGNATURE_WINDOW_SECONDS`, `STALE_AFTER_SECONDS`.
+- Produces: `assertNoCustomerPii(value)` for recursive reserved-key rejection.
 
 - [ ] **Step 1: Write failing schema tests**
 
-Add tests proving a normalized WooCommerce product with site/local IDs, SKU, prices, stock, aggregate units/gross/refunds/net/order count and timestamps passes; payloads containing `customer_email`, `billing_address`, `shipping_address`, or `customer_name` fail validation.
+Add tests proving a normalized WooCommerce product with site/local IDs, SKU, prices, stock, aggregate units/gross/refunds/net/order count and timestamps passes; payloads containing `customer_email`, `billing_address`, `shipping_address`, or `customer_name` at any nesting level fail validation.
 
 - [ ] **Step 2: Run the focused tests**
 
@@ -130,7 +134,7 @@ Expected: FAIL because schemas/constants are missing.
 
 - [ ] **Step 3: Implement schemas and constants**
 
-Product money fields are decimal strings plus ISO 4217-style uppercase three-letter currency. Aggregate counts are non-negative integers. Event payloads permit documented event metadata but reject reserved customer-PII keys recursively through an explicit `assertNoCustomerPii(value)` refinement.
+Product money fields are decimal strings plus uppercase three-letter currency. Aggregate counts are non-negative integers. Event payloads permit documented metadata but reject reserved customer-PII keys recursively.
 
 - [ ] **Step 4: Run tests**
 
@@ -156,13 +160,26 @@ git commit -m "feat: define ecosystem sync contracts"
 - Produces: `generateClientSecret() -> string`.
 - Produces: `hashClientSecret(secret) -> string` using SHA-256 for stored secret fingerprinting.
 - Produces: `canonicalRequest({ method, path, timestamp, nonce, bodyBytes }) -> string` exactly as `METHOD\nPATH\nTIMESTAMP\nNONCE\nSHA256_BODY_HEX`.
-- Produces: `signCanonical(canonical, secret) -> hex HMAC-SHA256`.
+- Produces: `signCanonical(canonical, secret) -> lowercase hex HMAC-SHA256`.
 - Produces: `createNodeAuth({ repository, now }) -> Express middleware`.
 - Consumes repository methods: `findCredential(clientId)`, `consumeNonce(clientId, nonce, expiresAt)`.
 
-- [ ] **Step 1: Write failing canonical-signature tests**
+- [ ] **Step 1: Write the fixed cross-language signing-vector test**
 
-Assert deterministic body hashing, canonical string layout, HMAC output stability and timing-safe verification for one fixed fixture.
+Fixture values are exact:
+
+```text
+method: POST
+path: /v1/ecosystem/products/sync
+timestamp: 1790539200
+nonce: nonce-test-001
+body bytes: {"products":[]}
+secret: test-secret-123
+body SHA-256: 86d8b086af0fc30d06856e218fcfdb6b803f91b45f50b1b753d8deac627fc054
+expected HMAC-SHA256: 46a4fc71a03109edf5d5577f1a95601f14a4481b48b5c29d41ac759cc58cd2be
+```
+
+Assert exact canonical string layout and expected HMAC. This same vector is used by the PHP connector plan.
 
 - [ ] **Step 2: Write failing security-window tests**
 
@@ -189,7 +206,7 @@ git add src/ecosystem/credentials.js src/ecosystem/auth.js test/ecosystem.creden
 git commit -m "feat: secure ecosystem node requests"
 ```
 
-### Task 4: Site Registration and Heartbeats
+### Task 4: Site Registration, Heartbeats, and App Injection
 
 **Files:**
 - Create: `src/ecosystem/repository.js`
@@ -202,30 +219,35 @@ git commit -m "feat: secure ecosystem node requests"
 - Produces service methods: `registerSite(input)`, `recordHeartbeat(principal, input)`, `listSites()`, `getSite(siteId)`.
 - `registerSite(input)` returns `{ site, clientId, clientSecret }`; `clientSecret` is returned exactly once and only a hash is persisted.
 - Bootstrap route requires header `X-OneGodian-Bootstrap-Key` equal to `ECOSYSTEM_BOOTSTRAP_KEY` using timing-safe comparison.
+- `createApp(options = {})` accepts optional `database`, `ecosystemRepository`, and `now` injections for deterministic tests. With no `DATABASE_URL` and no injected repository, existing routes still start while ecosystem mutation routes return `503 ecosystem_persistence_unavailable`.
 
 - [ ] **Step 1: Write failing HTTP tests for registration**
 
-Assert missing/wrong bootstrap key returns 401; valid `POST /v1/ecosystem/sites/register` returns 201, site ID, client ID and one-time client secret; a second response/read never exposes stored secret material.
+Assert missing/wrong bootstrap key returns 401; valid `POST /v1/ecosystem/sites/register` returns 201, site ID, client ID and one-time client secret; a subsequent site read never exposes stored secret material.
 
 - [ ] **Step 2: Write failing heartbeat tests**
 
 Using signed headers from Task 3, assert `POST /v1/ecosystem/sites/heartbeat` records WordPress/PHP/plugin versions, adapter capability summary and heartbeat timestamp; payload containing customer PII fails with 400.
 
-- [ ] **Step 3: Run focused route tests**
+- [ ] **Step 3: Write failing no-database startup test**
+
+Call `createApp()` with `DATABASE_URL` absent; assert `/health` still responds and ecosystem registration returns 503 rather than crashing process startup.
+
+- [ ] **Step 4: Run focused route tests**
 
 Run: `node --test test/ecosystem.routes.test.js`
 Expected: FAIL because repository/service/router are missing.
 
-- [ ] **Step 4: Implement repository/site service/router and mount it**
+- [ ] **Step 5: Implement repository/site service/router and mount it**
 
-`createEcosystemRepository(db)` uses parameterized PostgreSQL upserts. `createEcosystemService({ repository, now })` owns IDs and state transitions. `createEcosystemRouter(deps)` mounts under `/v1/ecosystem` from `src/app.js`.
+`createEcosystemRepository(db)` uses parameterized PostgreSQL queries/upserts. `createEcosystemService({ repository, now })` owns IDs/state transitions. `createEcosystemRouter(deps)` mounts under `/v1/ecosystem` from `src/app.js`.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests**
 
 Run: `node --test test/ecosystem.routes.test.js`
-Expected: PASS for registration/heartbeat cases.
+Expected: PASS for registration, heartbeat and no-database startup cases.
 
-- [ ] **Step 6: Commit**
+- [ ] **Step 7: Commit**
 
 ```bash
 git add src/ecosystem/repository.js src/ecosystem/service.js src/ecosystem/router.js src/app.js test/ecosystem.routes.test.js
@@ -247,7 +269,7 @@ git commit -m "feat: register and monitor ecosystem sites"
 
 - [ ] **Step 1: Write failing product idempotency tests**
 
-Assert first `(site_id, local_product_id, source_checksum)` creates one row; same checksum is `unchanged`; new checksum updates that row; repeated request does not increase record count or aggregate units.
+Assert first `(site_id, local_product_id, source_checksum)` creates one row; same checksum is `unchanged`; new checksum updates that row; repeated request does not increase record count or cumulative units.
 
 - [ ] **Step 2: Write failing product route tests**
 
@@ -356,20 +378,20 @@ git add src/ecosystem/service.js src/ecosystem/router.js src/app.js test/ecosyst
 git commit -m "feat: expose ecosystem operational health"
 ```
 
-### Task 8: OpenAPI, Route Map, and Full Verification
+### Task 8: OpenAPI and Route Contract
 
 **Files:**
 - Modify: `docs/openapi.yaml`
 - Modify: `docs/onegodian-api-route-map.md`
 - Modify: `package.json`
-- Test: all API tests
+- Test: `test/ecosystem.routes.test.js`
 
 **Interfaces:**
 - Documents only the route/status/error contracts implemented in Tasks 1-7.
 
-- [ ] **Step 1: Add contract assertions for documented route set**
+- [ ] **Step 1: Add documentation contract assertions**
 
-Add a test that reads `docs/openapi.yaml` and asserts the implemented `/v1/ecosystem` paths are present while `/v1/ecosystem/valuation/*` and active MCP transport are absent from this foundation plan.
+Read `docs/openapi.yaml` and assert implemented `/v1/ecosystem` paths are present while valuation routes and active MCP transport are absent from this foundation stage.
 
 - [ ] **Step 2: Run the contract test and verify failure**
 
@@ -384,10 +406,10 @@ Document auth headers, bootstrap registration, product/metric/event schemas, sta
 
 Include syntax checks for all new ecosystem JS modules and migration runner.
 
-- [ ] **Step 5: Run complete verification**
+- [ ] **Step 5: Run verification**
 
 Run: `npm test && npm run check`
-Expected: PASS with no skipped ecosystem tests.
+Expected: PASS.
 
 - [ ] **Step 6: Commit**
 
@@ -396,6 +418,36 @@ git add docs/openapi.yaml docs/onegodian-api-route-map.md package.json test/ecos
 git commit -m "docs: publish ecosystem API foundation contract"
 ```
 
+### Task 9: PostgreSQL Integration Test and CI Gate
+
+**Files:**
+- Create: `test/ecosystem.postgres.test.js`
+- Modify: `.github/workflows/ci.yml`
+- Modify: `package.json`
+
+**Interfaces:**
+- Integration tests consume `TEST_DATABASE_URL` and run only in the explicit `test:postgres` script; ordinary `npm test` remains repository-double/unit HTTP coverage.
+
+- [ ] **Step 1: Write failing PostgreSQL integration test**
+
+Test applies migration 001 to an empty PostgreSQL database, registers a site/retrieves it through `createEcosystemRepository`, consumes a nonce twice to prove unique replay enforcement, upserts the same product twice to prove one row, writes duplicate event ID to prove one event, then rolls back/cleans test data.
+
+- [ ] **Step 2: Add CI PostgreSQL service**
+
+Use a pinned PostgreSQL major supported by the deployment environment, expose `TEST_DATABASE_URL`, run `npm run migrate`, `npm run test:postgres`, then normal `npm test && npm run check`.
+
+- [ ] **Step 3: Run CI-equivalent commands locally against a test database**
+
+Run: `TEST_DATABASE_URL=... DATABASE_URL=... npm run migrate && npm run test:postgres && npm test && npm run check`
+Expected: PASS.
+
+- [ ] **Step 4: Commit**
+
+```bash
+git add test/ecosystem.postgres.test.js .github/workflows/ci.yml package.json
+git commit -m "test: verify ecosystem persistence on postgres"
+```
+
 ## Plan Completion Gate
 
-This plan is complete when a registered test node can obtain one-time credentials, sign requests, heartbeat, idempotently sync products/metrics/events into durable PostgreSQL storage, read normalized cross-site state with scope enforcement, and surface truthful readiness/staleness. Valuation and MCP are intentionally excluded and begin only after this foundation passes its full test suite.
+This plan is complete when a registered test node can obtain one-time credentials, sign requests, heartbeat, idempotently sync products/metrics/events into durable PostgreSQL storage, read normalized cross-site state with scope enforcement, surface truthful readiness/staleness, and pass both repository-double tests and a real PostgreSQL CI gate. Valuation and MCP begin only after this foundation is green.
