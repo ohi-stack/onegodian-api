@@ -4,7 +4,7 @@
 
 **Goal:** Build the durable `api.onegodian.org` site registry, signed node authentication, product synchronization, aggregate metrics, events, reconciliation status, and auditable ecosystem read APIs required by Gregory's OneGodian Ecosystem Plugin™.
 
-**Architecture:** Add a focused `src/ecosystem/` subsystem to the existing Express service and persist authoritative cross-site state in PostgreSQL through `DATABASE_URL`. WordPress nodes register through a one-time bootstrap credential, receive a node-scoped client secret once, and thereafter authenticate HMAC-signed requests with timestamp and nonce replay protection. Existing local WordPress/WooCommerce systems remain authoritative for local records; the API owns normalized cross-site aggregation state.
+**Architecture:** Add a focused `src/ecosystem/` subsystem to the existing Express service and persist authoritative cross-site state in PostgreSQL through `DATABASE_URL`. WordPress nodes register through a one-time bootstrap credential, receive a node-scoped client secret once, and thereafter authenticate HMAC-signed requests with timestamp and nonce replay protection. The server persists the HMAC secret encrypted at rest with a separate server-side credential-encryption key plus a non-secret fingerprint. Existing local WordPress/WooCommerce systems remain authoritative for local records; the API owns normalized cross-site aggregation state.
 
 **Tech Stack:** Node.js >=20, Express 4, Zod 3, PostgreSQL via `pg`, Node `crypto`, Node `node:test`, existing request-ID/logging middleware.
 
@@ -17,7 +17,9 @@
 - Local sites remain authoritative for local source records.
 - Customer PII is not required for ecosystem product analytics and must not be ingested by default.
 - Missing or disconnected source data must return explicit stale/unavailable state, not fabricated values.
-- Secrets must never appear in repository history, logs, or client responses after initial credential issuance.
+- Node HMAC secrets are returned once, then stored encrypted at rest using `ECOSYSTEM_CREDENTIAL_ENCRYPTION_KEY`; only a SHA-256 fingerprint may be stored unencrypted.
+- If credential encryption is unavailable, registration fails closed; never persist a plaintext or hash-only HMAC secret.
+- Secrets must never appear in repository history, logs, audit payloads, or later client responses.
 - All replay-sensitive mutations require idempotency or equivalent unique-source protection.
 - OpenAPI must document only implemented behavior.
 - Node runtime floor remains `>=20.0.0`.
@@ -25,11 +27,11 @@
 
 ## Review Focus
 
-1. **Replayed signed request:** same nonce/signature submitted twice must be rejected with `409 replay_detected`; pinned in Task 3.
-2. **Clock-skewed request:** a request outside the five-minute acceptance window must be rejected with `401 stale_request`; pinned in Task 3.
+1. **Credential confidentiality/usability:** registration must fail closed without the encryption key, persist decryptable ciphertext + fingerprint with the key, and never expose secret after issuance; pinned in Task 3 and Task 4.
+2. **Replayed or clock-skewed signed request:** duplicate nonce returns `409 replay_detected`; requests outside five minutes return `401 stale_request`; pinned in Task 3.
 3. **Duplicate product event:** a repeated source product/version must not create a second product row or inflate metrics; pinned in Task 5.
 4. **Unexpected customer fields:** sync payloads containing email/name/address keys must be rejected rather than silently persisted; pinned in Task 2 and Task 4.
-5. **Disconnected/stale site:** heartbeat older than the configured threshold must surface `stale` in site reads instead of `healthy`; pinned in Task 7.
+5. **Disconnected/stale site:** heartbeat older than configured threshold must surface `stale` instead of `healthy`; pinned in Task 7.
 
 ---
 
@@ -40,14 +42,14 @@
 - `src/db.js` — PostgreSQL pool, query, transaction, health and migration helpers.
 - `src/ecosystem/constants.js` — route/security constants and allowed scopes.
 - `src/ecosystem/schemas.js` — Zod schemas for registration, products, metrics and events.
-- `src/ecosystem/credentials.js` — secret generation, hashing, HMAC canonicalization and verification.
+- `src/ecosystem/credentials.js` — secret generation, encryption/decryption, fingerprinting, HMAC canonicalization and verification.
 - `src/ecosystem/auth.js` — Express middleware for bootstrap and node-scoped authentication.
-- `src/ecosystem/repository.js` — persistence interface for sites, nonces, products, metrics, events and sync runs.
+- `src/ecosystem/repository.js` — persistence interface for sites, credentials, nonces, products, metrics, events and sync runs.
 - `src/ecosystem/service.js` — normalization/orchestration logic independent of Express.
 - `src/ecosystem/router.js` — `/v1/ecosystem` routes.
 - `migrations/001_ecosystem_foundation.sql` — durable ecosystem schema.
 - `scripts/migrate.js` — idempotent migration runner.
-- `test/ecosystem.credentials.test.js` — signing/replay unit tests.
+- `test/ecosystem.credentials.test.js` — signing/encryption/replay unit tests.
 - `test/ecosystem.service.test.js` — normalization/idempotency unit tests.
 - `test/ecosystem.routes.test.js` — HTTP contract tests.
 - `test/ecosystem.postgres.test.js` — migration/repository integration tests against PostgreSQL.
@@ -57,7 +59,7 @@
 
 - `src/app.js` — dependency injection, ecosystem router and readiness state.
 - `package.json` — add `pg`, migration script and syntax checks for ecosystem modules.
-- `.env.example` — add bootstrap key and security-window settings.
+- `.env.example` — add bootstrap, credential-encryption and security-window settings.
 - `.github/workflows/ci.yml` — run PostgreSQL service, migrations and integration tests.
 - `docs/openapi.yaml` — document implemented ecosystem foundation routes after route tests pass.
 - `docs/onegodian-api-route-map.md` — add production status for implemented routes only.
@@ -89,7 +91,7 @@ Expected: FAIL because `src/db.js` does not exist.
 
 - [ ] **Step 3: Implement the database adapter and migration SQL**
 
-Use `pg.Pool`; keep SQL parameterized. `001_ecosystem_foundation.sql` defines service-supplied text/UUID identifiers, UTC timestamps, unique `(site_id, local_product_id)`, unique event IDs, unique `(client_id, nonce)`, JSONB metadata/payload columns where normalization does not justify separate columns, and indexes for site status, product source, event time and metric time.
+Use `pg.Pool`; keep SQL parameterized. `ecosystem_node_credentials` stores `client_id`, `site_id`, encrypted secret envelope (`ciphertext`, `iv`, `auth_tag`, algorithm/version), unencrypted SHA-256 fingerprint, scopes, revoked state and timestamps—never plaintext secret. Define unique `(site_id, local_product_id)`, unique event IDs, unique `(client_id, nonce)`, JSONB metadata/payload columns where normalization does not justify separate columns, and indexes for site status, product source, event time and metric time.
 
 - [ ] **Step 4: Implement `scripts/migrate.js`**
 
@@ -97,7 +99,7 @@ Read `DATABASE_URL`, apply unapplied `migrations/*.sql` in filename order inside
 
 - [ ] **Step 5: Update configuration and scripts**
 
-Add dependency `pg`; add `npm run migrate`; add `ECOSYSTEM_BOOTSTRAP_KEY`, `ECOSYSTEM_SIGNATURE_WINDOW_SECONDS=300`, and `ECOSYSTEM_STALE_AFTER_SECONDS=900` to `.env.example`.
+Add dependency `pg`; add `npm run migrate`; add `ECOSYSTEM_BOOTSTRAP_KEY`, blank `ECOSYSTEM_CREDENTIAL_ENCRYPTION_KEY` (base64-encoded 32-byte key), `ECOSYSTEM_SIGNATURE_WINDOW_SECONDS=300`, and `ECOSYSTEM_STALE_AFTER_SECONDS=900` to `.env.example`.
 
 - [ ] **Step 6: Run checks**
 
@@ -148,7 +150,7 @@ git add src/ecosystem/constants.js src/ecosystem/schemas.js test/ecosystem.servi
 git commit -m "feat: define ecosystem sync contracts"
 ```
 
-### Task 3: Node Registration and HMAC Authentication
+### Task 3: Node Credential Encryption and HMAC Authentication
 
 **Files:**
 - Create: `src/ecosystem/credentials.js`
@@ -158,15 +160,16 @@ git commit -m "feat: define ecosystem sync contracts"
 
 **Interfaces:**
 - Produces: `generateClientSecret() -> string`.
-- Produces: `hashClientSecret(secret) -> string` using SHA-256 for stored secret fingerprinting.
+- Produces: `parseCredentialEncryptionKey(base64) -> Buffer(32)`; invalid/missing key returns explicit unavailable state.
+- Produces: `encryptClientSecret(secret, key) -> { algorithm:'aes-256-gcm', version:1, ciphertext, iv, authTag }`.
+- Produces: `decryptClientSecret(envelope, key) -> string`.
+- Produces: `fingerprintClientSecret(secret) -> lowercase SHA-256 hex`.
 - Produces: `canonicalRequest({ method, path, timestamp, nonce, bodyBytes }) -> string` exactly as `METHOD\nPATH\nTIMESTAMP\nNONCE\nSHA256_BODY_HEX`.
 - Produces: `signCanonical(canonical, secret) -> lowercase hex HMAC-SHA256`.
-- Produces: `createNodeAuth({ repository, now }) -> Express middleware`.
+- Produces: `createNodeAuth({ repository, credentialKey, now }) -> Express middleware`.
 - Consumes repository methods: `findCredential(clientId)`, `consumeNonce(clientId, nonce, expiresAt)`.
 
 - [ ] **Step 1: Write the fixed cross-language signing-vector test**
-
-Fixture values are exact:
 
 ```text
 method: POST
@@ -181,29 +184,31 @@ expected HMAC-SHA256: 46a4fc71a03109edf5d5577f1a95601f14a4481b48b5c29d41ac759cc5
 
 Assert exact canonical string layout and expected HMAC. This same vector is used by the PHP connector plan.
 
-- [ ] **Step 2: Write failing security-window tests**
+- [ ] **Step 2: Write failing credential-encryption tests**
+
+Round-trip one fixed secret with a fixed 32-byte test key; assert ciphertext does not contain secret; fingerprint is deterministic; wrong key/auth tag fails; missing/invalid production encryption key yields `credential_encryption_unavailable` rather than plaintext fallback.
+
+- [ ] **Step 3: Write failing security-window tests**
 
 Assert a timestamp older/newer than 300 seconds returns `stale_request`; first nonce use succeeds; second use returns `replay_detected` with HTTP 409.
 
-- [ ] **Step 3: Run tests and verify failure**
+- [ ] **Step 4: Run tests and verify failure**
 
 Run: `node --test test/ecosystem.credentials.test.js`
 Expected: FAIL because credentials/auth modules are missing.
 
-- [ ] **Step 4: Implement credential helpers and middleware**
+- [ ] **Step 5: Implement credential helpers and middleware**
 
-Read headers `X-OneGodian-Site`, `X-OneGodian-Client`, `X-OneGodian-Timestamp`, `X-OneGodian-Nonce`, `X-OneGodian-Signature`; reject missing scope, revoked credentials, site mismatch, stale timestamp, bad signature and replayed nonce with stable error codes.
+Read headers `X-OneGodian-Site`, `X-OneGodian-Client`, `X-OneGodian-Timestamp`, `X-OneGodian-Nonce`, `X-OneGodian-Signature`; decrypt the stored HMAC secret only inside the auth path; reject unavailable key, missing scope, revoked credentials, site mismatch, stale timestamp, bad signature and replayed nonce with stable safe error codes; never log decrypted secret.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 6: Run tests and commit**
 
 Run: `node --test test/ecosystem.credentials.test.js`
 Expected: PASS.
 
-- [ ] **Step 6: Commit**
-
 ```bash
 git add src/ecosystem/credentials.js src/ecosystem/auth.js test/ecosystem.credentials.test.js test/helpers/ecosystemMemoryRepository.js
-git commit -m "feat: secure ecosystem node requests"
+git commit -m "feat: secure ecosystem node credentials"
 ```
 
 ### Task 4: Site Registration, Heartbeats, and App Injection
@@ -217,13 +222,13 @@ git commit -m "feat: secure ecosystem node requests"
 
 **Interfaces:**
 - Produces service methods: `registerSite(input)`, `recordHeartbeat(principal, input)`, `listSites()`, `getSite(siteId)`.
-- `registerSite(input)` returns `{ site, clientId, clientSecret }`; `clientSecret` is returned exactly once and only a hash is persisted.
+- `registerSite(input)` returns `{ site, clientId, clientSecret }`; `clientSecret` is returned exactly once; repository persists only encrypted secret envelope + fingerprint.
 - Bootstrap route requires header `X-OneGodian-Bootstrap-Key` equal to `ECOSYSTEM_BOOTSTRAP_KEY` using timing-safe comparison.
-- `createApp(options = {})` accepts optional `database`, `ecosystemRepository`, and `now` injections for deterministic tests. With no `DATABASE_URL` and no injected repository, existing routes still start while ecosystem mutation routes return `503 ecosystem_persistence_unavailable`.
+- `createApp(options = {})` accepts optional `database`, `ecosystemRepository`, `credentialKey`, and `now` injections for deterministic tests. With no `DATABASE_URL` and no injected repository, existing routes still start while ecosystem mutation routes return `503 ecosystem_persistence_unavailable`.
 
 - [ ] **Step 1: Write failing HTTP tests for registration**
 
-Assert missing/wrong bootstrap key returns 401; valid `POST /v1/ecosystem/sites/register` returns 201, site ID, client ID and one-time client secret; a subsequent site read never exposes stored secret material.
+Assert missing/wrong bootstrap key returns 401; missing credential-encryption key returns `503 credential_encryption_unavailable`; valid registration returns 201, site ID, client ID and one-time client secret; subsequent site/credential reads never expose secret/ciphertext/auth tag.
 
 - [ ] **Step 2: Write failing heartbeat tests**
 
@@ -240,14 +245,12 @@ Expected: FAIL because repository/service/router are missing.
 
 - [ ] **Step 5: Implement repository/site service/router and mount it**
 
-`createEcosystemRepository(db)` uses parameterized PostgreSQL queries/upserts. `createEcosystemService({ repository, now })` owns IDs/state transitions. `createEcosystemRouter(deps)` mounts under `/v1/ecosystem` from `src/app.js`.
+`createEcosystemRepository(db)` uses parameterized PostgreSQL queries/upserts. `createEcosystemService({ repository, credentialKey, now })` owns IDs, encryption and state transitions. `createEcosystemRouter(deps)` mounts under `/v1/ecosystem` from `src/app.js`.
 
-- [ ] **Step 6: Run tests**
+- [ ] **Step 6: Run tests and commit**
 
 Run: `node --test test/ecosystem.routes.test.js`
 Expected: PASS for registration, heartbeat and no-database startup cases.
-
-- [ ] **Step 7: Commit**
 
 ```bash
 git add src/ecosystem/repository.js src/ecosystem/service.js src/ecosystem/router.js src/app.js test/ecosystem.routes.test.js
@@ -284,12 +287,10 @@ Expected: FAIL on missing product methods/routes.
 
 Use unique `(site_id, local_product_id)` plus checksum/version comparison; never sum product-level cumulative aggregates during repeated syncs.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Run tests and commit**
 
 Run: `node --test test/ecosystem.service.test.js test/ecosystem.routes.test.js`
 Expected: PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/ecosystem/repository.js src/ecosystem/service.js src/ecosystem/router.js test/ecosystem.service.test.js test/ecosystem.routes.test.js
@@ -325,12 +326,10 @@ Expected: FAIL.
 
 Implement `POST /metrics/sync`, `GET /metrics`, `POST /events`, `GET /events`, `GET /sync/status`; reserve `POST /sync/run` for privileged orchestration and return `501 not_implemented` until the API actually has a runnable central job.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Run tests and commit**
 
 Run: `node --test test/ecosystem.routes.test.js`
 Expected: PASS and confirms `/sync/run` is not advertised as active behavior.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/ecosystem/repository.js src/ecosystem/service.js src/ecosystem/router.js test/ecosystem.routes.test.js
@@ -347,7 +346,7 @@ git commit -m "feat: ingest ecosystem metrics and events"
 
 **Interfaces:**
 - Produces: `siteOperationalState(site, now, staleAfterSeconds) -> 'healthy'|'stale'|'disabled'|'never_connected'`.
-- Extends `/ready` checks with `ecosystemPersistence` and `ecosystemRoutes` without claiming database readiness when DB health fails.
+- Extends `/ready` checks with `ecosystemPersistence`, `ecosystemCredentialEncryption`, and `ecosystemRoutes` without claiming readiness when DB/key health fails.
 
 - [ ] **Step 1: Write failing stale-site tests**
 
@@ -355,7 +354,7 @@ With a fixed clock, assert heartbeat age <=900 seconds is `healthy`, >900 second
 
 - [ ] **Step 2: Write failing readiness tests**
 
-Assert DB health failure yields `ready:false` for ecosystem persistence rather than reporting success.
+Assert DB health failure yields `ecosystemPersistence:false`; missing/invalid encryption key yields `ecosystemCredentialEncryption:false` rather than reporting ecosystem readiness.
 
 - [ ] **Step 3: Run tests**
 
@@ -366,12 +365,10 @@ Expected: FAIL.
 
 Keep current API health response backwards-compatible while adding explicit ecosystem details.
 
-- [ ] **Step 5: Run tests**
+- [ ] **Step 5: Run tests and commit**
 
 Run: `npm test`
 Expected: all existing and ecosystem tests PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add src/ecosystem/service.js src/ecosystem/router.js src/app.js test/ecosystem.routes.test.js
@@ -387,7 +384,7 @@ git commit -m "feat: expose ecosystem operational health"
 - Test: `test/ecosystem.routes.test.js`
 
 **Interfaces:**
-- Documents only the route/status/error contracts implemented in Tasks 1-7.
+- Documents only route/status/error contracts implemented in Tasks 1-7.
 
 - [ ] **Step 1: Add documentation contract assertions**
 
@@ -400,18 +397,16 @@ Expected: FAIL until OpenAPI is updated.
 
 - [ ] **Step 3: Update OpenAPI and route map**
 
-Document auth headers, bootstrap registration, product/metric/event schemas, stable error codes, staleness state and scope requirements.
+Document auth headers, bootstrap registration, credential-encryption-unavailable error, product/metric/event schemas, stable error codes, staleness state and scope requirements. Never document secret ciphertext fields as client-visible response data.
 
 - [ ] **Step 4: Expand `npm run check`**
 
 Include syntax checks for all new ecosystem JS modules and migration runner.
 
-- [ ] **Step 5: Run verification**
+- [ ] **Step 5: Run verification and commit**
 
 Run: `npm test && npm run check`
 Expected: PASS.
-
-- [ ] **Step 6: Commit**
 
 ```bash
 git add docs/openapi.yaml docs/onegodian-api-route-map.md package.json test/ecosystem.routes.test.js
@@ -426,19 +421,19 @@ git commit -m "docs: publish ecosystem API foundation contract"
 - Modify: `package.json`
 
 **Interfaces:**
-- Integration tests consume `TEST_DATABASE_URL` and run only in the explicit `test:postgres` script; ordinary `npm test` remains repository-double/unit HTTP coverage.
+- Integration tests consume `TEST_DATABASE_URL` and a fixed test credential-encryption key and run only in explicit `test:postgres`; ordinary `npm test` remains repository-double/unit HTTP coverage.
 
 - [ ] **Step 1: Write failing PostgreSQL integration test**
 
-Test applies migration 001 to an empty PostgreSQL database, registers a site/retrieves it through `createEcosystemRepository`, consumes a nonce twice to prove unique replay enforcement, upserts the same product twice to prove one row, writes duplicate event ID to prove one event, then rolls back/cleans test data.
+Apply migration 001 to an empty test database; register a site and assert credential row contains ciphertext/fingerprint but no plaintext; authenticate a signed request by decrypting through the service; consume a nonce twice to prove replay enforcement; upsert same product twice to prove one row; write duplicate event ID to prove one event.
 
 - [ ] **Step 2: Add CI PostgreSQL service**
 
-Use a pinned PostgreSQL major supported by the deployment environment, expose `TEST_DATABASE_URL`, run `npm run migrate`, `npm run test:postgres`, then normal `npm test && npm run check`.
+Use a pinned PostgreSQL major supported by deployment, expose `TEST_DATABASE_URL`, `DATABASE_URL`, and a non-production fixed CI `ECOSYSTEM_CREDENTIAL_ENCRYPTION_KEY`; run migration, `test:postgres`, normal tests and syntax checks.
 
 - [ ] **Step 3: Run CI-equivalent commands locally against a test database**
 
-Run: `TEST_DATABASE_URL=... DATABASE_URL=... npm run migrate && npm run test:postgres && npm test && npm run check`
+Run: `TEST_DATABASE_URL=... DATABASE_URL=... ECOSYSTEM_CREDENTIAL_ENCRYPTION_KEY=... npm run migrate && npm run test:postgres && npm test && npm run check`
 Expected: PASS.
 
 - [ ] **Step 4: Commit**
@@ -450,4 +445,4 @@ git commit -m "test: verify ecosystem persistence on postgres"
 
 ## Plan Completion Gate
 
-This plan is complete when a registered test node can obtain one-time credentials, sign requests, heartbeat, idempotently sync products/metrics/events into durable PostgreSQL storage, read normalized cross-site state with scope enforcement, surface truthful readiness/staleness, and pass both repository-double tests and a real PostgreSQL CI gate. Valuation and MCP begin only after this foundation is green.
+This plan is complete when a registered test node can obtain a one-time secret, the API stores that HMAC credential encrypted at rest, signed requests authenticate with replay protection, products/metrics/events synchronize idempotently into durable PostgreSQL storage, normalized state reads enforce scopes, readiness/staleness remain truthful, and both repository-double and real PostgreSQL CI tests pass. Valuation and MCP begin only after this foundation is green.
