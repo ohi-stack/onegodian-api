@@ -12,6 +12,17 @@ The repository is the shared API gateway for OneGodian commercial software. It i
 
 The current runtime already exposes early membership, product, billing, Algorithm and verification surfaces. The September 2026 upgrade adds OLLM as a first-class API domain and establishes the production architecture required for durable authentication, persistence, usage metering, billing and developer access.
 
+
+## Canonical OneGodian Platform Architecture
+
+The current cross-repository contract is documented in [`docs/CANONICAL-PLATFORM-ARCHITECTURE-2026-10-03.md`](docs/CANONICAL-PLATFORM-ARCHITECTURE-2026-10-03.md).
+
+The former standalone `app.onegodian.com` architecture is retired. `api.OneGodian.org` is the shared technical backbone for the interconnected OneGodian Platform.
+
+The **OneGodian MCP Gateway™** is the central MCP entry point through this API core. Specialized sites/plugins expose approved capabilities and metadata to the gateway; they are not independent ecosystem-wide MCP authorities.
+
+Shared-core responsibilities now include identity/authentication, connectors, adapters, events/webhooks, synchronization, registries/verification, analytics, valuation, Knowledge/RAG, tool registry/services, and MCP interoperability.
+
 ## Platform domains
 
 - **Platform:** health, readiness, status and versioning
@@ -21,6 +32,8 @@ The current runtime already exposes early membership, product, billing, Algorith
 - **Algorithm:** versioned alignment/evaluation interfaces
 - **Verification:** versioned verification/registration interfaces
 - **Operations:** audit, metrics, provider health, webhooks and admin statistics
+- **Knowledge / RAG:** canonical knowledge registry, ingestion/retrieval contracts, provenance-aware context delivery
+- **MCP Gateway:** centralized OneGodian MCP tool/capability entry point, permissions, scopes and audit
 - **Quantum-OHI™:** admin-protected platform intelligence, health analysis, anomalies, dependencies, recommendations, events, forecasts and audit
 
 See `docs/API-ONEGODIAN-ORG-PLATFORM-ARCHITECTURE-2026-09.md` for the canonical September 2026 architecture and `docs/QUANTUM-OHI-PLATFORM-INTELLIGENCE-2026-09-17.md` for the Quantum-OHI execution boundary.
