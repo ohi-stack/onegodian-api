@@ -17,7 +17,7 @@ Canonical journey:
 
 The Mapper may organize a member's self-supplied reflections and provide educational comparisons with documented OneGodian teachings. It must not automatically declare a person OneGodian, assign religious identity, rank belief, confer office, certification, legal status, or governmental status.
 
-A OneGodian identity is an explicit self-declaration by the member.
+A OneGodian identity is an explicit self-declaration by the member. Participation in the OneGodian Journey is also explicit opt-in; it must not be inferred from reflection answers.
 
 ## Privacy boundary
 
@@ -27,6 +27,8 @@ Permitted shared summary fields are limited to operational metadata such as:
 - canonical OneGodian user/member identifier
 - mapper status
 - completion/progress
+- explicit OneGodian Journey opt-in
+- explicit OneGodian identity declaration
 - self-selected journey stage
 - member-controlled public-stage flag
 - update timestamp
