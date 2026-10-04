@@ -2,6 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createRootApp } from '../src/rootApp.js';
 
+process.env.ACC_FEEDS_ENABLED = 'false';
+
 function serve(t) {
   const server = createRootApp().listen(0);
   t.after(() => server.close());
@@ -30,7 +32,11 @@ test('public console routes serve HTML while machine routes stay JSON', async t 
   const manifest = await (await fetch(base + '/manifest')).json();
   assert.equal(manifest.runtimeOwner, 'ohi-stack/onegodian-api');
   assert.equal(manifest.executionAuthority, 'ACC');
-  assert.equal(manifest.registries.oips.status, 'unknown');
+  assert.equal(manifest.registries.oips.status, 'not_configured');
+  const feeds = await (await fetch(base + '/v1/platform/feeds')).json();
+  assert.equal(feeds.executionAuthority, 'ACC');
+  assert.equal(feeds.registries.tools.status, 'unknown');
+  assert.equal(feeds.registries.agents.status, 'not_configured');
 });
 
 test('v1 aliases preserve existing API behavior and mapper mounting', async t => {

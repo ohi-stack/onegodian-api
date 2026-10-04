@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
 import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
 import { createBeliefMapperRouter } from './beliefMapperRouter.js';
+import { createFeedCollector } from './feeds.js';
 
 const SERVICE_VERSION = '0.4.0';
 
@@ -123,6 +124,7 @@ function checkoutUrl(kind, id) {
 }
 
 export function createApp() {
+  const collectFeeds = createFeedCollector();
   const app = express();
 
   app.disable('x-powered-by');
@@ -147,7 +149,12 @@ export function createApp() {
   // The root app retains the existing legacy mapper mount for compatibility.
   app.use('/api/v1/belief-mapper', createBeliefMapperRouter());
   app.use(createConsoleRouter());
-  app.get('/manifest', (req, res) => res.set('Cache-Control', 'no-store').json(platformManifest(SERVICE_VERSION)));
+  app.get('/manifest', async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store').json(platformManifest(SERVICE_VERSION, await collectFeeds())); } catch (error) { next(error); }
+  });
+  app.get('/api/v1/platform/feeds', async (req, res, next) => {
+    try { res.set('Cache-Control', 'no-store').json({ executionAuthority: 'ACC', registries: await collectFeeds() }); } catch (error) { next(error); }
+  });
 
   app.get('/health', (req, res) => res.json({
     ok: true,
