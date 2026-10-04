@@ -11,12 +11,13 @@ const pages = {
 };
 const nav = Object.entries(pages).map(([path, [label]]) => ({ path, label }));
 
-export function platformManifest(version) {
+export function platformManifest(version, registries) {
   return {
     name: 'onegodian-api', version, runtimeOwner: 'ohi-stack/onegodian-api',
     console: { name: 'O-H-I Command Center', maturity: 'In development', routes: Object.keys(pages) },
     machine: { health: '/health', manifest: '/manifest', version: '/version', runtime: '/api/status', api: '/v1', legacyApi: '/api/v1' },
     endpoints: [
+      ['GET', '/v1/platform/feeds', 'Sanitized ACC and registry observations; OIPS assessment evidence'],
       ['GET', '/v1/profile', 'Platform profile'],
       ['POST', '/v1/alignment/evaluate', 'Rule-based alignment evaluation'],
       ['GET', '/v1/belief-mapper/questions', 'Belief Mapper questions'],
@@ -26,7 +27,7 @@ export function platformManifest(version) {
     ].map(([method, path, description]) => ({ method, path, description })),
     executionAuthority: 'ACC',
     authorityBoundary: 'Human → O-H-I Command Center → ACC authorization → OneGodian API → services/tools/connectors',
-    registries: Object.fromEntries(['acc', 'tools', 'integrations', 'activity', 'oips'].map(name => [name, {
+    registries: registries || Object.fromEntries(['acc', 'tools', 'integrations', 'activity', 'oips'].map(name => [name, {
       status: 'unknown', reason: 'No authoritative runtime feed is implemented in this repository.'
     }])),
     authentication: { status: 'development_only', productionReady: false },

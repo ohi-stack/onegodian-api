@@ -41,3 +41,7 @@ Run `npm run check` and `npm test`. Regression coverage checks HTML public route
 ## Rollback
 
 Restore the previously recorded deployed commit through the same hosting workflow, then verify health, version and existing machine API endpoints. This restores the prior JSON root. Clients that read identity from `/` must migrate to `/health` before rollout; rollback should be coordinated with those consumers. This candidate introduces no persistent data changes. Keep production environment values unchanged.
+
+## Follow-up feed integration candidate
+
+The original static unknown feed boundary above describes the homepage release. The subsequent connector candidate adds server-side ACC observations, sanitized opt-in registry counts and optional OIPS assessment consumption; see `CONSOLE-FEEDS.md`. It does not supply missing ACC credentials, upstream deployment or an OIPS validator. Production integration remains unverified until those dependencies are configured and tested.

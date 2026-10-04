@@ -40,10 +40,18 @@ function value(result, field) {
 }
 function registryCards(manifest) {
   const grid = element('div', undefined, 'cards');
-  for (const [key, title] of [['acc', 'ACC status'], ['tools', 'Tool registry'], ['integrations', 'Integrations'], ['activity', 'Platform activity'], ['oips', 'OIPS compliance']]) {
+  for (const [key, title] of [['acc', 'ACC status'], ['agents', 'Agent registry'], ['tools', 'Tool registry'], ['integrations', 'Integrations'], ['activity', 'Platform activity'], ['oips', 'OIPS compliance']]) {
     const record = manifest.data?.registries?.[key];
     const node = card(title, record?.reason || 'Authoritative runtime evidence unavailable.');
     node.append(element('span', `Status: ${record?.status || 'Unknown'}`, 'status-label'));
+    if (record?.source) node.append(element('p', `Source: ${record.source}`));
+    if (record?.observedAt) node.append(element('p', `Observed: ${new Date(record.observedAt).toLocaleString()}`));
+    if (record?.checkedAt) node.append(element('p', `Last checked: ${new Date(record.checkedAt).toLocaleString()}`));
+    if (Number.isSafeInteger(record?.count)) node.append(element('p', `Reported records: ${record.count}`));
+    if (record?.readiness) node.append(element('p', `Readiness: ${record.readiness}`));
+    if (record?.scope) node.append(element('p', `Assessment scope: ${record.scope}`));
+    if (record?.evaluatedAt) node.append(element('p', `Evaluated: ${new Date(record.evaluatedAt).toLocaleString()}`));
+    if (Array.isArray(record?.checks)) for (const check of record.checks) node.append(element('p', `${check.capability}: ${check.status}`));
     grid.append(node);
   }
   return grid;
@@ -126,14 +134,15 @@ function render(health, version, runtime, manifest) {
     content.append(grid);
   }
   if (page === '/integrations') {
-    const node = card('MCP · Plugins · Adapters', 'Approved tools must be registered and permissioned through ACC. No connected integration registry feed is implemented in this API version.');
+    const node = card('MCP · Plugins · Adapters', 'Approved tools must be registered and permissioned through ACC. Registry observations use server-side ACC reads. Missing credentials, unavailable sources and stale observations are shown explicitly.');
     const tags = element('div', undefined, 'tags');
     for (const name of ['WordPress plugins', 'MCP connectors', 'Provider adapters', 'Authorized services']) tags.append(element('span', name));
     node.append(tags);content.append(node, registryCards(manifest));
   }
   if (page === '/' || page === '/admin') {
     const node = card('OIPS capability chain', 'Instructions / Rules → Knowledge / RAG → Skills → Tools / Actions → Tests / Verification');
-    node.append(element('p', 'Compliance status: Unknown. Provider-independent contracts and topology are not evidence of a working compliance validator.'));
+    const assessment = manifest.data?.registries?.oips;
+    node.append(element('p', `Assessment: ${assessment?.status || 'unknown'}. Upstream evidence is not independent compliance certification.`));
     content.append(node);
   }
 }

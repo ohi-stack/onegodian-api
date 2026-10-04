@@ -242,3 +242,9 @@ Monitoring reads same-origin `/health`, `/version`, `/api/status` and `/manifest
 No provider keys, new identity backend, state-changing developer actions or ACC bypass are introduced. `/admin` uses existing authentication and authorization; the new administration page additionally returns 503 in production because production console identity is not configured. Existing admin endpoints retain their behavior and known development-auth limitations. This does not harden the existing authentication implementation.
 
 Classification: **Release candidate for public-console routing only**. Live rendering, host deployment and integration connectivity have not been verified. Do not equate existing development readiness flags with production readiness. See `docs/OHI-CONSOLE-RELEASE.md` for acceptance and rollback.
+
+## ACC and OIPS feed integration candidate
+
+The console manifest now reads sanitized server-side ACC observations rather than static registry placeholders. It also exposes `GET /v1/platform/feeds`. Public health/readiness observations are separate from authenticated agent, connection and audit counts. Private summaries require a server-side `ACC_READ_KEY` and explicit `ACC_PUBLIC_SUMMARIES=true` publication opt-in. Source and observation times are displayed; failed refreshes mark retained observations stale.
+
+No dedicated ACC tool registry or authoritative OIPS assessment endpoint exists in the inspected ACC source. Tool status remains unknown; the optional OIPS consumer stays disabled until its documented upstream contract is implemented. Reported assessment passes do not certify compliance. See `docs/CONSOLE-FEEDS.md` for configuration, evidence schema, access boundaries and rollback. This is a release candidate for the connector; live integration requires deployment and upstream access.
