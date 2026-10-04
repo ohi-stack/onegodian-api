@@ -227,3 +227,15 @@ A feature should not be called operational until it is:
 ## Organizational boundary
 
 `api.onegodian.org` is commercial/software infrastructure of ONEGODIAN, LLC. API responses do not independently create religious membership, governmental or sovereign status, financial authority, title, ownership, patent rights, or third-party legal/institutional recognition. INO religious and internal-governance functions remain organizationally separate unless a specific interface is expressly documented and authorized.
+
+## Approved ecosystem connector and valuation planning
+
+Approved architecture and implementation planning for Gregory's OneGodian Ecosystem Plugin™ is tracked in:
+
+- `docs/superpowers/specs/2026-09-27-onegodian-ecosystem-connector-design.md`
+- `docs/superpowers/plans/2026-09-27-ecosystem-api-foundation.md`
+- `docs/superpowers/plans/2026-09-27-ecosystem-valuation-mcp.md`
+
+The approved boundary keeps `api.onegodian.org` as the cross-site synchronization, aggregation, valuation and MCP authority while connected WordPress/WooCommerce sites remain authoritative for their own source records. Live valuation totals must be source-backed, auditable and protected against parent/child double counting.
+
+These ecosystem/valuation/MCP capabilities remain implementation-plan scope until their persistence, security, tests, OpenAPI and deployment gates are completed; their presence in documentation does not mean the runtime endpoints are active yet.
