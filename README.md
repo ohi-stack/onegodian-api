@@ -112,8 +112,11 @@ Production deployments must replace permissive development defaults with explici
 
 | Method | Path | Purpose |
 | --- | --- | --- |
-| `GET` | `/` | service identity |
-| `GET` | `/health` | healthcheck |
+| `GET` | `/` | O-H-I Command Center HTML homepage |
+| `GET` | `/status`, `/docs`, `/developers`, `/services`, `/integrations` | public console views |
+| `GET` | `/manifest` | machine-readable route inventory and evidence boundaries |
+| `GET` / `POST` | `/v1/*` | aliases of implemented `/api/v1/*` handlers |
+| `GET` | `/health` | healthcheck plus former root service identity fields |
 | `GET` | `/ready` | readiness checks for routes, billing, products, and members |
 | `GET` | `/version` | service name and version |
 | `GET` | `/api/status` | runtime status |
@@ -227,3 +230,15 @@ A feature should not be called operational until it is:
 ## Organizational boundary
 
 `api.onegodian.org` is commercial/software infrastructure of ONEGODIAN, LLC. API responses do not independently create religious membership, governmental or sovereign status, financial authority, title, ownership, patent rights, or third-party legal/institutional recognition. INO religious and internal-governance functions remain organizationally separate unless a specific interface is expressly documented and authorized.
+
+## O-H-I Command Center candidate (2026-10-04)
+
+The Express service owns the console at `/`; the separate Sites project supplies the design reference, not the production routing authority. Public views use OneGodian obsidian (`#070607`), gold (`#d8b35a`) and violet (`#b994ed`). Assets are served only under `/console-assets/`; there is no SPA catch-all over machine or admin paths.
+
+The former root JSON identity fields are now at `/health`, alongside the existing `ok`, `service`, uptime and request-ID fields. Existing API, billing, product, member and Quantum-OHI paths are preserved. Canonical `/v1/*` aliases reuse implemented `/api/v1/*` handlers, including the root-mounted Belief Mapper; nonexistent endpoints still return JSON 404.
+
+Monitoring reads same-origin `/health`, `/version`, `/api/status` and `/manifest` without credentials every 30 seconds while the tab is visible. Charts and observation activity describe this browser session only. ACC, tool registry, integration registry, platform activity and OIPS compliance remain Unknown until authoritative feeds exist. The topology illustrates the contract; it is not a connectivity test.
+
+No provider keys, new identity backend, state-changing developer actions or ACC bypass are introduced. `/admin` uses existing authentication and authorization; the new administration page additionally returns 503 in production because production console identity is not configured. Existing admin endpoints retain their behavior and known development-auth limitations. This does not harden the existing authentication implementation.
+
+Classification: **Release candidate for public-console routing only**. Live rendering, host deployment and integration connectivity have not been verified. Do not equate existing development readiness flags with production readiness. See `docs/OHI-CONSOLE-RELEASE.md` for acceptance and rollback.
