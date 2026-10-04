@@ -5,6 +5,7 @@ import morgan from 'morgan';
 import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
 import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
+import { createBeliefMapperRouter } from './beliefMapperRouter.js';
 
 const SERVICE_VERSION = '0.4.0';
 
@@ -142,6 +143,9 @@ export function createApp() {
     next();
   });
 
+  // Canonical mapper aliases enter here after shared security/CORS/request middleware.
+  // The root app retains the existing legacy mapper mount for compatibility.
+  app.use('/api/v1/belief-mapper', createBeliefMapperRouter());
   app.use(createConsoleRouter());
   app.get('/manifest', (req, res) => res.set('Cache-Control', 'no-store').json(platformManifest(SERVICE_VERSION)));
 

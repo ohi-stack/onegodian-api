@@ -71,6 +71,26 @@ test('console assets cannot shadow API routes and unknown paths remain JSON', as
   }
 });
 
+test('canonical mapper alias applies shared CORS and security headers', async t => {
+  const prior = process.env.CORS_ORIGIN;
+  process.env.CORS_ORIGIN = 'https://onegodian.org';
+  t.after(() => { if (prior === undefined) delete process.env.CORS_ORIGIN; else process.env.CORS_ORIGIN = prior; });
+  const base = serve(t);
+  const res = await fetch(base + '/v1/belief-mapper/questions', {
+    headers: { origin: 'https://onegodian.org', 'x-request-id': 'mapper-alias-regression' }
+  });
+  assert.equal(res.status, 200);
+  assert.equal(res.headers.get('access-control-allow-origin'), 'https://onegodian.org');
+  assert.match(res.headers.get('content-security-policy'), /script-src 'self'/);
+  assert.equal(res.headers.get('x-request-id'), 'mapper-alias-regression');
+  assert.equal((await res.json()).questions.length, 5);
+  const preflight = await fetch(base + '/v1/belief-mapper/evaluate', {
+    method: 'OPTIONS', headers: { origin: 'https://onegodian.org', 'access-control-request-method': 'POST', 'access-control-request-headers': 'content-type' }
+  });
+  assert.equal(preflight.status, 204);
+  assert.equal(preflight.headers.get('access-control-allow-origin'), 'https://onegodian.org');
+});
+
 test('administration never falls through to the public console', async t => {
   const base = serve(t);
   for (const path of ['/admin', '/admin/tools', '/admin/stats', '/admin/quantum-ohi/overview']) {
