@@ -4,6 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
+import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
+import { createBeliefMapperRouter } from './beliefMapperRouter.js';
 
 const SERVICE_VERSION = '0.4.0';
 
@@ -135,16 +137,23 @@ export function createApp() {
     next();
   });
 
-  app.get('/', (req, res) => res.json({
-    name: 'onegodian-api',
-    status: 'online',
-    version: SERVICE_VERSION,
-    timestampUtc: new Date().toISOString(),
-    requestId: req.requestId
-  }));
+  // Internal alias: preserve method, body, headers and query; run middleware once.
+  app.use((req, res, next) => {
+    if (/^\/v1(?=\/|\?|$)/.test(req.url)) req.url = '/api' + req.url;
+    next();
+  });
+
+  // Canonical mapper aliases enter here after shared security/CORS/request middleware.
+  // The root app retains the existing legacy mapper mount for compatibility.
+  app.use('/api/v1/belief-mapper', createBeliefMapperRouter());
+  app.use(createConsoleRouter());
+  app.get('/manifest', (req, res) => res.set('Cache-Control', 'no-store').json(platformManifest(SERVICE_VERSION)));
 
   app.get('/health', (req, res) => res.json({
     ok: true,
+    name: 'onegodian-api',
+    status: 'online',
+    version: SERVICE_VERSION,
     service: 'onegodian-api',
     timestampUtc: new Date().toISOString(),
     uptimeSeconds: Math.round(process.uptime()),
@@ -380,6 +389,15 @@ export function createApp() {
       runtimeUptimeSeconds: Math.round(process.uptime())
     })
   }));
+
+  // Do not create a second identity system in the console.
+  app.get('/admin', requireAuth, requireAdmin, (req, res) => {
+    if (process.env.NODE_ENV === 'production') {
+      return res.status(503).json({ error: 'production_console_auth_not_configured', requestId: req.requestId });
+    }
+    return res.set('Cache-Control', 'no-store').type('html').send(renderConsole('/admin'));
+  });
+  app.use('/admin', requireAuth, requireAdmin);
 
   app.post('/api/verify', (req, res) => res.redirect(307, '/api/v1/verify'));
   app.post('/api/register', (req, res) => res.redirect(307, '/api/v1/register'));
