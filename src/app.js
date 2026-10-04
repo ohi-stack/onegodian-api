@@ -5,7 +5,7 @@ import morgan from 'morgan';
 import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
 import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
-import { createBeliefMapperRouter } from './beliefMapperRouter.js';
+import { createBeliefMapperRouter } from './beliefMapperRouter.js';\nimport { createVerificationService } from './verification.js';
 
 const SERVICE_VERSION = '0.4.0';
 
@@ -20,6 +20,15 @@ const RegisterSchema = z.object({
   title: z.string().min(1).max(200),
   owner: z.string().min(1).max(200).optional(),
   payload: z.record(z.unknown()).default({})
+});
+
+const VerifySchema = z.object({
+  recordId: z.string().min(1).max(200).optional(),
+  odinId: z.string().min(1).max(200).optional(),
+  hash: z.string().regex(/^(?:0x)?[a-fA-F0-9]{64}$/).optional(),
+  type: z.enum(['record', 'document', 'certificate', 'transaction', 'asset']).optional()
+}).refine((data) => Boolean(data.recordId || data.odinId || data.hash), {
+  message: 'At least one verification locator is required: recordId, odinId, or hash.'
 });
 
 const SignupSchema = z.object({
@@ -124,6 +133,7 @@ function checkoutUrl(kind, id) {
 
 export function createApp() {
   const app = express();
+  const verificationService = createVerificationService();
 
   app.disable('x-powered-by');
   app.use(helmet());
@@ -168,7 +178,8 @@ export function createApp() {
       billing: true,
       products: true,
       members: true,
-      quantumOhi: true
+      quantumOhi: true,
+      obp1Verification: verificationService.status().configured
     },
     timestampUtc: new Date().toISOString(),
     requestId: req.requestId
@@ -217,14 +228,29 @@ export function createApp() {
     });
   });
 
-  app.post('/api/v1/verify', (req, res) => res.json({
-    verified: true,
-    verificationMode: 'development-placeholder',
-    inputHashEligible: true,
-    input: req.body || {},
-    timestampUtc: new Date().toISOString(),
+  app.get('/api/v1/verification/status', (req, res) => res.json({
+    ...verificationService.status(),
     requestId: req.requestId
   }));
+
+  const handleVerification = async (req, res) => {
+    const parsed = VerifySchema.safeParse(req.body || {});
+    if (!parsed.success) {
+      return res.status(400).json({
+        verified: false,
+        status: 'invalid_request',
+        error: 'invalid_verification_payload',
+        details: parsed.error.flatten(),
+        requestId: req.requestId
+      });
+    }
+
+    const result = await verificationService.verify(parsed.data, { requestId: req.requestId });
+    return res.status(result.httpStatus).json(result.body);
+  };
+
+  app.post('/api/v1/verification/verify', handleVerification);
+  app.post('/api/v1/verify', handleVerification);
 
   app.post('/api/v1/register', (req, res) => {
     const parsed = RegisterSchema.safeParse(req.body || {});
