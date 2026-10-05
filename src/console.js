@@ -21,7 +21,9 @@ export function platformManifest(version) {
       ['POST', '/v1/alignment/evaluate', 'Rule-based alignment evaluation'],
       ['GET', '/v1/belief-mapper/questions', 'Belief Mapper questions'],
       ['POST', '/v1/belief-mapper/evaluate', 'Belief Mapper evaluation'],
-      ['POST', '/v1/verify', 'Development verification placeholder'],
+      ['GET', '/v1/verification/status', 'OBP-1 verification adapter status'],
+      ['POST', '/v1/verification/verify', 'Fail-closed authoritative OBP-1 verification'],
+      ['POST', '/v1/verify', 'Compatibility alias for OBP-1 verification'],
       ['POST', '/v1/register', 'Development registration placeholder']
     ].map(([method, path, description]) => ({ method, path, description })),
     executionAuthority: 'ACC',

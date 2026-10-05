@@ -105,6 +105,8 @@ npm run health # call /health on a running server
 | `HEALTHCHECK_URL` | optional base URL for `npm run health` | `http://127.0.0.1:$PORT` |
 | `STRIPE_SECRET_KEY` | enables `stripe_configured` billing posture when present | unset |
 | `STRIPE_WEBHOOK_SECRET` | reserved for real Stripe webhook signature verification | unset |
+| `OBP1_VERIFY_URL` | full authoritative OBP-1 verification endpoint used by the shared API adapter | unset |
+| `OBP1_API_KEY` | optional server-side credential for the OBP-1 authority | unset |
 
 Production deployments must replace permissive development defaults with explicit origin allowlists and approved secret-management practices.
 
@@ -122,7 +124,9 @@ Production deployments must replace permissive development defaults with explici
 | `GET` | `/api/status` | runtime status |
 | `GET` | `/api/v1/profile` | OneGodian API profile |
 | `POST` | `/api/v1/alignment/evaluate` | evaluate candidate options under the OneGodian Algorithm decision rule |
-| `POST` | `/api/v1/verify` | development verification placeholder |
+| `GET` | `/api/v1/verification/status` | OBP-1 adapter configuration/status; never asserts record verification |
+| `POST` | `/api/v1/verification/verify` | fail-closed OBP-1 verification lookup through the configured authority |
+| `POST` | `/api/v1/verify` | compatibility alias for the fail-closed OBP-1 verification handler |
 | `POST` | `/api/v1/register` | development registration placeholder |
 | `POST` | `/api/members/signup` | create development member token |
 | `POST` | `/api/members/login` | create development member token for existing or new email |
@@ -145,7 +149,7 @@ Production deployments must replace permissive development defaults with explici
 | `GET` | `/admin/quantum-ohi/audit` | audit contract and records |
 | `GET` | `/admin/quantum-ohi/settings` | read-only intelligence-layer settings |
 
-Legacy paths `/api/verify` and `/api/register` are preserved with `307` redirects to the v1 endpoints.
+Legacy path `/api/verify` is preserved with a `307` redirect to `/api/v1/verify`, which uses the same fail-closed OBP-1 handler. `/api/register` remains a compatibility redirect to the development registration endpoint.
 
 ## Authentication direction
 
@@ -242,3 +246,12 @@ Monitoring reads same-origin `/health`, `/version`, `/api/status` and `/manifest
 No provider keys, new identity backend, state-changing developer actions or ACC bypass are introduced. `/admin` uses existing authentication and authorization; the new administration page additionally returns 503 in production because production console identity is not configured. Existing admin endpoints retain their behavior and known development-auth limitations. This does not harden the existing authentication implementation.
 
 Classification: **Release candidate for public-console routing only**. Live rendering, host deployment and integration connectivity have not been verified. Do not equate existing development readiness flags with production readiness. See `docs/OHI-CONSOLE-RELEASE.md` for acceptance and rollback.
+
+
+## OBP-1™ verification boundary
+
+The shared API does not create OBP-1 verification truth. It validates request shape and delegates verification to the authoritative endpoint configured in `OBP1_VERIFY_URL`.
+
+If that authority is not configured, times out, rejects the request, returns a non-verified state, or reports revocation/supersession, the API returns `verified: false`. A local hash match, UI record, registration response, or ODeFi database value is not sufficient to produce `verified: true`.
+
+Current module status: **In Development** until the authoritative OBP-1 service endpoint, authentication, production response contract, audit evidence, deployment, and live acceptance tests are verified.
