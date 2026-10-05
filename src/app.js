@@ -5,7 +5,8 @@ import morgan from 'morgan';
 import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
 import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
-import { createBeliefMapperRouter } from './beliefMapperRouter.js';\nimport { createVerificationService } from './verification.js';
+import { createBeliefMapperRouter } from './beliefMapperRouter.js';
+import { createVerificationService } from './verification.js';
 
 const SERVICE_VERSION = '0.4.0';
 
