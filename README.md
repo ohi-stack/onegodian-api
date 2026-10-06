@@ -242,3 +242,7 @@ Monitoring reads same-origin `/health`, `/version`, `/api/status` and `/manifest
 No provider keys, new identity backend, state-changing developer actions or ACC bypass are introduced. `/admin` uses existing authentication and authorization; the new administration page additionally returns 503 in production because production console identity is not configured. Existing admin endpoints retain their behavior and known development-auth limitations. This does not harden the existing authentication implementation.
 
 Classification: **Release candidate for public-console routing only**. Live rendering, host deployment and integration connectivity have not been verified. Do not equate existing development readiness flags with production readiness. See `docs/OHI-CONSOLE-RELEASE.md` for acceptance and rollback.
+
+## OneGodian LLM Synthesis Engine™ integration
+
+This repository follows the shared model-agnostic synthesis, OIPS portability, authority, provenance, and human-approval contract documented in [`docs/LLM-SYNTHESIS-ENGINE-INTEGRATION.md`](docs/LLM-SYNTHESIS-ENGINE-INTEGRATION.md). The canonical Synthesis Engine code authority remains `ohi-stack/onegodian-llm`; this repository implements only its own integration boundary.
