@@ -397,7 +397,7 @@ export function createApp() {
     if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({ error: 'production_console_auth_not_configured', requestId: req.requestId });
     }
-    const path = req.path.replace(/\\/$/, '') || '/admin';
+    const path = req.path.endsWith('/') ? req.path.slice(0, -1) : req.path;
     return res.set('Cache-Control', 'private, no-store').set('Vary', 'Authorization')
       .set('X-Robots-Tag', 'noindex, nofollow').type('html')
       .send(renderAdminConsole(path));
