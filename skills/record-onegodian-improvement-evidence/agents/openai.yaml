@@ -1,0 +1,4 @@
+interface:
+  display_name: "OneGodian Improvement Evidence"
+  short_description: "Record provenance, approval, and rollback evidence"
+  default_prompt: "Use $record-onegodian-improvement-evidence to process a OneGodian improvement with traceable evidence."

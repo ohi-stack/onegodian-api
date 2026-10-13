@@ -1,0 +1,4 @@
+interface:
+  display_name: "OneGodian Recursive Improvement"
+  short_description: "Run evidence-based OHI and OMOS improvement cycles"
+  default_prompt: "Use $run-onegodian-recursive-improvement to process a OneGodian improvement with traceable evidence."
