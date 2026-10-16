@@ -4,7 +4,8 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import { z } from 'zod';
 import { createQuantumOhiRouter } from './quantumOhi.js';
-import { createConsoleRouter, platformManifest, renderConsole } from './console.js';
+import { createConsoleRouter, platformManifest } from './console.js';
+import { adminPages, renderAdminConsole } from './adminConsole.js';
 import { createBeliefMapperRouter } from './beliefMapperRouter.js';
 
 const SERVICE_VERSION = '0.4.0';
@@ -390,12 +391,16 @@ export function createApp() {
     })
   }));
 
-  // Do not create a second identity system in the console.
-  app.get('/admin', requireAuth, requireAdmin, (req, res) => {
+  // Administrative UI uses only the existing development auth. It cannot activate
+  // in production until separately verified, persistent authentication/RBAC exists.
+  app.get(Object.keys(adminPages), requireAuth, requireAdmin, (req, res) => {
     if (process.env.NODE_ENV === 'production') {
       return res.status(503).json({ error: 'production_console_auth_not_configured', requestId: req.requestId });
     }
-    return res.set('Cache-Control', 'no-store').type('html').send(renderConsole('/admin'));
+    const path = req.path.endsWith('/') ? req.path.slice(0, -1) : req.path;
+    return res.set('Cache-Control', 'private, no-store').set('Vary', 'Authorization')
+      .set('X-Robots-Tag', 'noindex, nofollow').type('html')
+      .send(renderAdminConsole(path));
   });
   app.use('/admin', requireAuth, requireAdmin);
 

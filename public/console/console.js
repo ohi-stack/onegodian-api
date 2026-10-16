@@ -150,3 +150,19 @@ async function refresh() {
 refreshButton.addEventListener('click', refresh);
 refresh();
 setInterval(() => { if (!document.hidden) refresh(); }, 30000);
+
+/* Accessible compact navigation for mobile browser widths. */
+const menuToggle = document.querySelector('#nav-toggle');
+const mobileNav = document.querySelector('#site-nav');
+if (menuToggle && mobileNav) {
+  const closeMenu = () => {
+    mobileNav.classList.remove('is-open');
+    menuToggle.setAttribute('aria-expanded', 'false');
+  };
+  menuToggle.addEventListener('click', () => {
+    const opened = mobileNav.classList.toggle('is-open');
+    menuToggle.setAttribute('aria-expanded', String(opened));
+  });
+  document.addEventListener('keydown', event => { if (event.key === 'Escape') closeMenu(); });
+  mobileNav.addEventListener('click', event => { if (event.target.closest('a')) closeMenu(); });
+}
