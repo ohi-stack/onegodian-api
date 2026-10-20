@@ -68,3 +68,12 @@ test('membership does not confer LMS enrollment', async () => {
     assert.equal(body.learning.canAccess, false);
   });
 });
+
+test('string scopes and substring scopes never authorize', async () => {
+  for (const scopes of ['prefix:onegodianese:access:read:denied', ['prefix:onegodianese:access:read:denied'], null, [123, 'onegodianese:access:read']]) {
+    await withServer({ ...adapters, authenticate: async () => ({ subject: 'u', scopes }) }, async base => {
+      const r = await fetch(base + '/api/v1/onegodianese/access?slug=onegodianese');
+      assert.equal(r.status, 401);
+    });
+  }
+});
