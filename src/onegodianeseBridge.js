@@ -21,7 +21,9 @@ export function createOneGodianeseBridge({
     try {
       const principal = await authenticate(req);
       if (!principal || typeof principal.subject !== 'string' || !principal.subject.trim()
-        || !principal.scopes?.includes('onegodianese:access:read')) {
+        || !Array.isArray(principal.scopes)
+        || !principal.scopes.every(scope => typeof scope === 'string')
+        || !principal.scopes.includes('onegodianese:access:read')) {
         return res.status(401).json({ error: 'unauthorized', requestId: req.requestId });
       }
       // Never accept a user identifier from query params or client-submitted JSON.
